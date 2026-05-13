@@ -1,0 +1,10 @@
+*.rock
+*.src.rock
+*.o
+*.so
+.luarocks/
+.luarc.json
+workspace
+.worktrees
+.claude
+.mcp.json
