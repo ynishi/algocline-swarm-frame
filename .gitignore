@@ -8,3 +8,8 @@ workspace
 .worktrees
 .claude
 .mcp.json
+
+alc.local.toml
+alc.lock
+.env
+.env.*
