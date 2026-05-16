@@ -1,7 +1,19 @@
 {
   "schema_version": "hub_index/v0",
-  "updated_at": "2026-05-16T00:29:42Z",
+  "updated_at": "2026-05-16T07:05:27Z",
   "packages": [
+    {
+      "name": "swarm_aggregate_plugin",
+      "version": "0.1.0",
+      "description": "Swarm aggregate plugin bridging dmad / moa / reconcile to swarm_frame_algocline.make_dispatcher (initial: dmad only).",
+      "category": "frame_plugin",
+      "docstring": "swarm_aggregate_plugin — Swarm aggregate plugin for swarm_frame.\n\nBridges Swarm-style multi-agent aggregation packages\n(algocline-bundled-packages: dmad / moa / reconcile, ...) onto\n`swarm_frame_algocline.make_dispatcher`.\n\nThe bundled pkgs each export their algorithm as `M.run(ctx)` plus a\nhandful of LLM-independent pure helpers\n(`build_*_prompt` / `extract_*` / `aggregate_*`). This plugin reuses\nthose helpers but **routes every LLM call through the dispatcher**\nso the Frame's plugin chain (before / around / after / finalize)\nand its check_mode-aware routing primitive (route_llm) own the\nround-trip discipline.\n\nInitial release (v0.1.0): dmad only. moa / reconcile / hegelian\nextension is anticipated under the same `M.run_<pkg>(opts)`\nconvention but not yet implemented — the survey\n(workspace/tasks/swarm-plugin-survey/pkg-survey.md) covers the shape.",
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
     {
       "name": "swarm_frame",
       "version": "0.1.1",

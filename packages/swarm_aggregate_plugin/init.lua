@@ -12,21 +12,21 @@
 --- and its check_mode-aware routing primitive (route_llm) own the
 --- round-trip discipline.
 ---
---- Trial scope (v0.0.1): dmad only. moa / reconcile / hegelian extension
---- is anticipated under the same `M.run_<pkg>(opts)` convention but not
---- yet implemented — the survey
+--- Initial release (v0.1.0): dmad only. moa / reconcile / hegelian
+--- extension is anticipated under the same `M.run_<pkg>(opts)`
+--- convention but not yet implemented — the survey
 --- (workspace/tasks/swarm-plugin-survey/pkg-survey.md) covers the shape.
 
 local M = {}
 
-M.VERSION = "0.0.1"
+M.VERSION = "0.1.0"
 
 M.meta = {
     name        = "swarm_aggregate_plugin",
-    version     = "0.0.1",
+    version     = "0.1.0",
     category    = "frame_plugin",
     description = "Swarm aggregate plugin bridging dmad / moa / reconcile "
-        .. "to swarm_frame_algocline.make_dispatcher (trial: dmad only).",
+        .. "to swarm_frame_algocline.make_dispatcher (initial: dmad only).",
 }
 
 -- ─── helpers ────────────────────────────────────────────────────────

@@ -125,11 +125,12 @@ and `alc_pkg_link` the `packages/` directory as shown in "Setup".
 
 ## Status
 
-v0.1.1 (Hub-ready). Frame core, state container, registry, verdict
-parser, linear pipeline runner, and the lshape 3-mode validation
-wrapper are implemented and covered by tests (193 cases, all
-passing). v0.1.1 adds Hub `hub_index.json` for `alc init` /
-`alc_hub_search` consumption.
+v0.2.0. Frame core (`swarm_frame` v0.1.1), Token & Prompt round-trip
+primitive (`swarm_frame_algocline` v0.1.1), and Swarm aggregate plugin
+(`swarm_aggregate_plugin` v0.1.0) bridging multi-agent debate (dmad
+/ Du 2023) onto the dispatcher. 193 lua tests + mock smoke + real-LLM
+e2e (agent-block) all passing. Hub `hub_index.json` (3 entries) for
+`alc init` / `alc_hub_search` consumption.
 
 ## License
 
