@@ -10,7 +10,7 @@
 --- Schema-as-Data and the persistable-by-construction invariant are
 --- inherited from lshape. See design/design-doc.md for details.
 ---
---- Status: v0.1.0 (PoC). API surface is under verification through the
+--- Status: v0.1.1 (PoC). API surface is under verification through the
 --- bundled_base_curator_orch rewrite.
 
 -- Host-injected `alc.json_decode` / `alc.json_encode` are the preferred
@@ -24,7 +24,7 @@ end
 
 local M = {}
 
-M.VERSION = "0.1.0"
+M.VERSION = "0.1.1"
 
 -- ─── check_mode (init-time freeze, strict by default) ───────────────────────
 --
@@ -102,7 +102,7 @@ end
 
 M.meta = {
     name        = "swarm_frame",
-    version     = "0.1.0",
+    version     = "0.1.1",
     category    = "frame",
     description = "Thin runtime for ProgramableSwarm — state container, "
         .. "session-key path registry, verdict parser, linear pipeline runner, "

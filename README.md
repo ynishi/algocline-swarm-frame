@@ -125,10 +125,11 @@ and `alc_pkg_link` the `packages/` directory as shown in "Setup".
 
 ## Status
 
-v0.1.0 (initial). Frame core, state container, registry, verdict
+v0.1.1 (Hub-ready). Frame core, state container, registry, verdict
 parser, linear pipeline runner, and the lshape 3-mode validation
 wrapper are implemented and covered by tests (193 cases, all
-passing).
+passing). v0.1.1 adds Hub `hub_index.json` for `alc init` /
+`alc_hub_search` consumption.
 
 ## License
 

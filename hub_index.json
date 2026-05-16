@@ -1,0 +1,30 @@
+{
+  "schema_version": "hub_index/v0",
+  "updated_at": "2026-05-16T00:29:42Z",
+  "packages": [
+    {
+      "name": "swarm_frame",
+      "version": "0.1.1",
+      "description": "Thin runtime for ProgramableSwarm — state container, session-key path registry, verdict parser, linear pipeline runner, and lshape 3-mode validation wrapper.",
+      "category": "frame",
+      "docstring": "swarm_frame — Thin runtime for ProgramableSwarm.\n\nProvides the back-stage that user code never has to think about:\nstate container, session-key path registry, verdict parsing, linear\npipeline runner, and an lshape 3-mode validation wrapper. User code\nonly registers a spec (and optionally a handler) per session-key\npath; state operations, step bookkeeping, logging, and verdict\nhandling are confined to the frame.\n\nSchema-as-Data and the persistable-by-construction invariant are\ninherited from lshape. See design/design-doc.md for details.\n\nStatus: v0.1.1 (PoC). API surface is under verification through the\nbundled_base_curator_orch rewrite.",
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "swarm_frame_algocline",
+      "version": "0.1.1",
+      "description": "Token & Prompt round-trip primitive — routes prompts to flow.llm_bound (strict / format) or alc.llm directly (non-check), with format-mode post-verify for JSON-shape conformance.",
+      "category": "frame_primitive",
+      "docstring": "swarm_frame_algocline — Token & Prompt round-trip primitive.\n\nThin wrapper exposing a dispatcher that swarm_frame.run_linear (or\nany orch that wants the round-trip primitive) can use as\n`ctx.dispatcher`. The adapter does exactly three things:\n\n1. step_id_of(path)      — strip the path down to a step segment\n2. builder(step, spec)   — call the orch-supplied prompt builder\n3. route the prompt to alc.llm per `swarm_frame.check_mode()`:\n* \"strict\"     → through `flow.llm_bound` (token round-trip\n+ resume cue + echo verify, all owned by\nflow itself).\n* \"non-check\"  → straight to `alc.llm(prompt, llm_opts)`,\nno token round-trip. The direct-prompt\npattern, for one-shot prompts that do\nnot need session-spanning identity.\n* \"format\"     → through `flow.llm_bound` (same routing as\nstrict) AND post-verify that the response\nis a Pure JSON object on the first line\ncarrying `status` + `flow_token` +\n`flow_slot` fields, with `flow_slot`\nmatching the dispatched step. Format\nconformance becomes the identity proof.\nNon-conformant responses are translated\ninto a `BLOCKED reason=format-<detail>`\nverdict string so run_linear halts the\npipeline with a structured reason.\n\nDomain-shaped concerns — middleware chains, variant routing, shape\nvalidation, prompt-budget warnings, agentId extraction,\n`build_instruction_default` — live **above** this adapter in the\nconsuming orch (or in a plugin layered onto `make_dispatcher`). The\nadapter is intentionally ignorant of those concerns; it provides the\nToken & Prompt round-trip only and exposes plugin hooks\n(`before_dispatch` / `around_dispatch` / `after_dispatch` /\n`finalize`) for callers to layer the rest on top.\n\nStatus: v0.1.1 (Token & Prompt + format mode).",
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    }
+  ]
+}
