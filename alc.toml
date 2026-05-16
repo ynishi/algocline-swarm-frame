@@ -1,0 +1,21 @@
+## algocline project marker for `alc` MCP server discovery.
+##
+## algocline-swarm-frame ships two frame packages
+## (swarm_frame / swarm_frame_algocline) and one plugin
+## (swarm_aggregate_plugin) under `./packages/`. Hub source registration
+## (BUNDLED_SOURCES / AUTO_INSTALL_SOURCES on the algocline side) is
+## covered by `./hub_index.json` (see task-mcp issue 1778888825-91420).
+##
+## Worktree-local pkg links (the three swarm_* pkgs above) are recorded
+## in `./alc.local.toml` (git-ignored). dmad / moa / reconcile and other
+## consumed pkgs are expected to be resolvable globally (via
+## ~/.algocline/packages/, typically populated by
+## algocline-bundled-packages).
+
+[hub]
+name        = "algocline-swarm-frame"
+description = """\
+Swarm Frame for algocline — thin runtime (swarm_frame), Token & Prompt \
+round-trip primitive (swarm_frame_algocline), and aggregate plugin \
+(swarm_aggregate_plugin) bridging multi-agent debate / aggregation \
+packages (dmad / moa / reconcile) onto the dispatcher."""
