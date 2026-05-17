@@ -68,3 +68,12 @@ clean:
 dist:
     @echo "Use the algocline MCP tool: alc_hub_dist source_dir=./packages output_path=./hub_index.json"
     @echo "(direct CLI invocation is not yet exposed; reindex result lands at ./hub_index.json)"
+
+# Run spec/ tests via the algocline MCP tool (alc_pkg_test).
+# alc is an MCP server binary, not a CLI — this recipe only documents
+# the MCP invocation. Run the actual tests by invoking the MCP tool from
+# a Claude Code / agent session.
+test-spec:
+    @echo "Use the algocline MCP tool: alc_pkg_test pkg=swarm_frame"
+    @echo "                            alc_pkg_test pkg=swarm_frame_algocline"
+    @echo "                            alc_pkg_test pkg=swarm_aggregate_plugin"
