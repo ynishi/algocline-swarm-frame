@@ -13,3 +13,5 @@ alc.local.toml
 alc.lock
 .env
 .env.*
+
+.alc-install.lock
