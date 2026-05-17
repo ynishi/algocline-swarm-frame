@@ -59,6 +59,14 @@ e2e-all:
     fi
     echo "=== All E2Es passed ==="
 
+# Format all Lua files in-place via stylua (uses .stylua.toml + .styluaignore).
+format:
+    stylua .
+
+# Check formatting without writing (exit 1 if any file needs reformat).
+format-check:
+    stylua --check .
+
 # Cleanup Lua build artifacts.
 clean:
     rm -rf .luarocks/ *.rock *.src.rock *.o *.so

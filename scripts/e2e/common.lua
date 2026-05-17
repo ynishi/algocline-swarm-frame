@@ -57,22 +57,15 @@ M.RESULTS_DIR = "workspace/e2e-results"
 
 local function timestamp()
     local t = os.date("*t")
-    return string.format(
-        "%04d-%02d-%02d_%02d%02d%02d",
-        t.year, t.month, t.day, t.hour, t.min, t.sec
-    )
+    return string.format("%04d-%02d-%02d_%02d%02d%02d", t.year, t.month, t.day, t.hour, t.min, t.sec)
 end
 
 local function ensure_result_dir(run_id)
     local root = std.env.project_root and std.env.project_root() or "."
     local base = std.path.join(root, M.RESULTS_DIR)
-    if not std.fs.exists(base) then
-        std.fs.mkdir(base, { recursive = true })
-    end
+    if not std.fs.exists(base) then std.fs.mkdir(base, { recursive = true }) end
     local run_dir = std.path.join(base, run_id)
-    if not std.fs.exists(run_dir) then
-        std.fs.mkdir(run_dir, { recursive = true })
-    end
+    if not std.fs.exists(run_dir) then std.fs.mkdir(run_dir, { recursive = true }) end
     return run_dir
 end
 
@@ -154,18 +147,20 @@ function M.run(opts)
         max_iterations = opts.max_iterations or M.DEFAULTS.max_iterations,
         mcp_servers = opts.mcp_servers or M.DEFAULTS.mcp_servers,
         on_turn = function(info)
-            log.info(string.format(
-                "Turn %d: %d tool calls, tokens: %d in / %d out",
-                info.turn_number,
-                #info.tool_calls,
-                info.usage and info.usage.input_tokens or 0,
-                info.usage and info.usage.output_tokens or 0
-            ))
+            log.info(
+                string.format(
+                    "Turn %d: %d tool calls, tokens: %d in / %d out",
+                    info.turn_number,
+                    #info.tool_calls,
+                    info.usage and info.usage.input_tokens or 0,
+                    info.usage and info.usage.output_tokens or 0
+                )
+            )
             turn_history[#turn_history + 1] = {
-                turn_number    = info.turn_number,
-                tool_calls     = info.tool_calls,
+                turn_number = info.turn_number,
+                tool_calls = info.tool_calls,
                 tool_responses = info.tool_responses,
-                usage          = info.usage,
+                usage = info.usage,
             }
         end,
     }
@@ -174,13 +169,15 @@ function M.run(opts)
     local result = agent.run(agent_opts)
     local elapsed_ms = std.time.now() - start_ms
 
-    log.info(string.format(
-        "Agent finished: ok=%s, turns=%d, tokens=%d, elapsed=%.1fs",
-        tostring(result.ok),
-        result.num_turns or 0,
-        result.usage and result.usage.total_tokens or 0,
-        elapsed_ms / 1000
-    ))
+    log.info(
+        string.format(
+            "Agent finished: ok=%s, turns=%d, tokens=%d, elapsed=%.1fs",
+            tostring(result.ok),
+            result.num_turns or 0,
+            result.usage and result.usage.total_tokens or 0,
+            elapsed_ms / 1000
+        )
+    )
 
     result.turn_history = turn_history
 
@@ -191,17 +188,16 @@ function M.run(opts)
         if not gr.passed then all_passed = false end
     end
 
-    log.info(string.format(
-        "=== E2E %s: %s ===",
-        opts.name, all_passed and "PASS" or "FAIL"
-    ))
+    log.info(string.format("=== E2E %s: %s ===", opts.name, all_passed and "PASS" or "FAIL"))
     for _, gr in ipairs(grader_report) do
-        log.info(string.format(
-            "  [%s] %s%s",
-            gr.passed and "PASS" or "FAIL",
-            gr.name,
-            gr.message and (" — " .. gr.message) or ""
-        ))
+        log.info(
+            string.format(
+                "  [%s] %s%s",
+                gr.passed and "PASS" or "FAIL",
+                gr.name,
+                gr.message and (" — " .. gr.message) or ""
+            )
+        )
     end
 
     local result_path = write_result(run_dir, opts.name, result, grader_report, {
@@ -236,9 +232,7 @@ function M.grader_content_contains(needle, name)
         check = function(result)
             if not result.ok then return false, "agent did not complete" end
             local content = result.content or ""
-            if content:find(needle, 1, true) then
-                return true, nil
-            end
+            if content:find(needle, 1, true) then return true, nil end
             return false, string.format("content did not contain %q", needle)
         end,
     }
@@ -311,7 +305,8 @@ function M.find_raw_tool_response(result, required_keys)
                     local all = true
                     for _, key in ipairs(required_keys) do
                         if not text:find(key, 1, true) then
-                            all = false; break
+                            all = false
+                            break
                         end
                     end
                     if all then return text end

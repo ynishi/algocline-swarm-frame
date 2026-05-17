@@ -64,7 +64,7 @@ M.host = nil
 -- the mode via `M.check_mode()` and pick the route + verdict shape.
 
 local _initialised = false
-local _check_mode  = "strict"
+local _check_mode = "strict"
 
 --- Freeze the frame's dispatcher routing + verdict shape policy.
 --- @param opts { check_mode?: "strict" | "non-check" | "format" }?
@@ -72,12 +72,14 @@ function M.init(opts)
     if _initialised then return end
     opts = opts or {}
     if opts.check_mode ~= nil then
-        if opts.check_mode ~= "strict"
-            and opts.check_mode ~= "non-check"
-            and opts.check_mode ~= "format" then
-            error("swarm_frame.init: check_mode must be "
-                .. "'strict' | 'non-check' | 'format' "
-                .. "(got " .. tostring(opts.check_mode) .. ")")
+        if opts.check_mode ~= "strict" and opts.check_mode ~= "non-check" and opts.check_mode ~= "format" then
+            error(
+                "swarm_frame.init: check_mode must be "
+                    .. "'strict' | 'non-check' | 'format' "
+                    .. "(got "
+                    .. tostring(opts.check_mode)
+                    .. ")"
+            )
         end
         _check_mode = opts.check_mode
     end
@@ -86,25 +88,21 @@ end
 
 --- Return the current check_mode ("strict" before init counts as
 --- the default; the value is locked once `init` runs).
-function M.check_mode()
-    return _check_mode
-end
+function M.check_mode() return _check_mode end
 
 --- Test-only: clear the freeze flag and restore the default mode.
 function M._reset_for_testing()
     _initialised = false
-    _check_mode  = "strict"
+    _check_mode = "strict"
 end
 
 --- Test-only: reset M.host to nil so the auto-detect chain is used.
-function M._reset_host_for_testing()
-    M.host = nil
-end
+function M._reset_host_for_testing() M.host = nil end
 
 M.meta = {
-    name        = "swarm_frame",
-    version     = "0.3.0",
-    category    = "frame",
+    name = "swarm_frame",
+    version = "0.3.0",
+    category = "frame",
     description = "Thin runtime for ProgramableSwarm — state container, "
         .. "session-key path registry, verdict parser, linear pipeline runner, "
         .. "and lshape 3-mode validation wrapper.",
@@ -122,16 +120,16 @@ M.meta = {
 
 local function host()
     if M.host then
-        if type(M.host) ~= "table"
-            or type(M.host.encode) ~= "function"
-            or type(M.host.decode) ~= "function" then
+        if type(M.host) ~= "table" or type(M.host.encode) ~= "function" or type(M.host.decode) ~= "function" then
             error("swarm_frame: M.host must have encode and decode functions")
         end
         return M.host
     end
-    if type(_G.alc) == "table"
+    if
+        type(_G.alc) == "table"
         and type(_G.alc.json_encode) == "function"
-        and type(_G.alc.json_decode) == "function" then
+        and type(_G.alc.json_decode) == "function"
+    then
         return { encode = _G.alc.json_encode, decode = _G.alc.json_decode }
     end
     local ok, dkjson = pcall(require, "dkjson")
@@ -188,52 +186,42 @@ function M.state_new(opts)
     opts = opts or {}
     local self = setmetatable({}, State)
     self._data = {}
-    self._backend = opts.backend       -- nil means memory-only
-    self._step_done = {}               -- step_id -> true
-    self._log = {}                     -- list of { step, kind, detail }
-    if opts.dump then
-        self:restore(opts.dump)
-    end
+    self._backend = opts.backend -- nil means memory-only
+    self._step_done = {} -- step_id -> true
+    self._log = {} -- list of { step, kind, detail }
+    if opts.dump then self:restore(opts.dump) end
     return self
 end
 
 function State:get(key) return get_path(self._data, key) end
 
-function State:set(key, value)
-    set_path(self._data, key, value)
-end
+function State:set(key, value) set_path(self._data, key, value) end
 
-function State:step_done(step_id)
-    return self._step_done[step_id] == true
-end
+function State:step_done(step_id) return self._step_done[step_id] == true end
 
-function State:step_mark(step_id)
-    self._step_done[step_id] = true
-end
+function State:step_mark(step_id) self._step_done[step_id] = true end
 
 function State:log_phase(step, kind, detail)
     self._log[#self._log + 1] = {
-        step = step, kind = kind, detail = detail or "",
+        step = step,
+        kind = kind,
+        detail = detail or "",
     }
 end
 
 function State:commit()
-    if self._backend and self._backend.save then
-        self._backend:save(self:_snapshot())
-    end
+    if self._backend and self._backend.save then self._backend:save(self:_snapshot()) end
 end
 
 function State:_snapshot()
     return {
-        data       = self._data,
-        step_done  = self._step_done,
-        log        = self._log,
+        data = self._data,
+        step_done = self._step_done,
+        log = self._log,
     }
 end
 
-function State:dump()
-    return json_encode(self:_snapshot())
-end
+function State:dump() return json_encode(self:_snapshot()) end
 
 --- Return the inner plain-table view of the state. Used by frame
 --- internals (and the orch convention) when handing off to a
@@ -244,9 +232,9 @@ function State:data() return self._data end
 
 function State:restore(json_str)
     local snap = json_decode(json_str)
-    self._data      = snap.data      or {}
+    self._data = snap.data or {}
     self._step_done = snap.step_done or {}
-    self._log       = snap.log       or {}
+    self._log = snap.log or {}
 end
 
 M.State = State
@@ -301,15 +289,13 @@ function M.unregister(path) registry[path] = nil end
 
 function M.resolve(path) return registry[path] end
 
-function M._registry() return registry end  -- exposed for testing only
+function M._registry() return registry end -- exposed for testing only
 
 --- Reduce a state argument to a plain table for spec-builder consumption.
 --- The orch convention spec-builders use `state.task_dir`-style access;
 --- frame.State containers expose `:data()` to honour that shape.
 local function as_plain_state(state)
-    if type(state) == "table" and type(state.data) == "function" then
-        return state:data()
-    end
+    if type(state) == "table" and type(state.data) == "function" then return state:data() end
     return state
 end
 
@@ -319,9 +305,7 @@ end
 --- wraps it with a path-based lookup so the two surfaces have
 --- different shapes (entry vs path) and no longer share a name.
 local function _resolve_entry_spec(entry, state)
-    if type(entry.spec) == "function" then
-        return entry.spec(as_plain_state(state))
-    end
+    if type(entry.spec) == "function" then return entry.spec(as_plain_state(state)) end
     return entry.spec
 end
 
@@ -333,9 +317,7 @@ end
 
 --- Extract the step id segment from a session-key path.
 --- "/pkg/step_1/agent" -> "step_1"
-local function step_id_of(path)
-    return (path:match("/([^/]+)/[^/]+$")) or path
-end
+local function step_id_of(path) return (path:match("/([^/]+)/[^/]+$")) or path end
 
 M.step_id_of = step_id_of
 
@@ -353,9 +335,7 @@ M.step_id_of = step_id_of
 --- as-is; flow attaches and verifies its own token pair around it.
 function M.build_step_instruction(path, state, instruction_builder)
     local entry = registry[path]
-    if not entry then
-        error("swarm_frame.build_step_instruction: unknown path=" .. tostring(path))
-    end
+    if not entry then error("swarm_frame.build_step_instruction: unknown path=" .. tostring(path)) end
     if type(instruction_builder) ~= "function" then
         error("swarm_frame.build_step_instruction: instruction_builder must be a function")
     end
@@ -388,13 +368,13 @@ function M.parse_verdict(response, opts)
         local ok, obj = pcall(json_decode, obj_str)
         if ok and type(obj) == "table" and type(obj.status) == "string" then
             return {
-                status     = obj.status,
-                path       = obj.path,
-                reason     = obj.reason,
-                missing    = obj.missing,
+                status = obj.status,
+                path = obj.path,
+                reason = obj.reason,
+                missing = obj.missing,
                 flow_token = obj.flow_token,
-                flow_slot  = obj.flow_slot,
-                raw        = r,
+                flow_slot = obj.flow_slot,
+                raw = r,
             }
         end
     end
@@ -406,16 +386,10 @@ function M.parse_verdict(response, opts)
         if p then return { status = "DONE", path = p, raw = r } end
     end
     local reason = r:match("BLOCKED%s+reason=(.+)")
-    if reason then
-        return { status = "BLOCKED",
-            reason = reason:match("^%s*(.-)%s*$"), raw = r }
-    end
+    if reason then return { status = "BLOCKED", reason = reason:match("^%s*(.-)%s*$"), raw = r } end
     if fuzzy then
         reason = r:match("BLOCKED%s*[:=]%s*(.+)")
-        if reason then
-            return { status = "BLOCKED",
-                reason = reason:match("^%s*(.-)%s*$"), raw = r }
-        end
+        if reason then return { status = "BLOCKED", reason = reason:match("^%s*(.-)%s*$"), raw = r } end
     end
     local miss = r:match("NEEDS_INPUT%s+missing=([^%s]+)")
     if miss then return { status = "NEEDS_INPUT", missing = miss, raw = r } end
@@ -492,9 +466,7 @@ end
 -- Future extension points (v0.4 candidates, see design doc §10.4):
 --   opts.case_sensitive, opts.line_anchor, parse_label_with_confidence
 
-local function _escape_lua_pattern(s)
-    return s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
-end
+local function _escape_lua_pattern(s) return s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1") end
 
 function M.parse_label_verdict(response, labels, opts)
     if response == nil then return nil end
@@ -519,9 +491,7 @@ function M.parse_label_verdict(response, labels, opts)
         -- Axis 1: prefix-form match (unconditional, no require_absent)
         for _, form in ipairs(forms) do
             local esc_form = _escape_lua_pattern(form):lower()
-            if r:find(esc_form .. "%s*" .. esc_label) then
-                return label
-            end
+            if r:find(esc_form .. "%s*" .. esc_label) then return label end
         end
         -- Axis 2: bare label match.
         --   bare_substring=true  → plain substring (find(..., 1, true))
@@ -601,8 +571,11 @@ function M.dispatch(path, ctx)
     local entry = registry[path]
     if not entry then error("swarm_frame.dispatch: unknown path=" .. path) end
     if type(entry.handler) ~= "function" then
-        error("swarm_frame.dispatch: no handler for path=" .. path
-            .. " (spec-only registration cannot be dispatched without external dispatcher)")
+        error(
+            "swarm_frame.dispatch: no handler for path="
+                .. path
+                .. " (spec-only registration cannot be dispatched without external dispatcher)"
+        )
     end
     local spec = _resolve_entry_spec(entry, ctx and ctx.state)
     return entry.handler(ctx, spec)
@@ -631,16 +604,14 @@ end
 
 function M.run_linear(paths, ctx)
     local state = ctx.state or error("swarm_frame.run_linear: ctx.state required")
-    local dispatcher = ctx.dispatcher  -- optional
+    local dispatcher = ctx.dispatcher -- optional
     local artifacts_key = ctx.artifacts_key or "artifacts"
     for _, path in ipairs(paths) do
         local step_id = step_id_of(path)
         if not state:step_done(step_id) then
             state:log_phase(step_id, "start", path)
             local entry = registry[path]
-            if not entry then
-                error("swarm_frame.run_linear: unknown path=" .. path)
-            end
+            if not entry then error("swarm_frame.run_linear: unknown path=" .. path) end
             local spec = _resolve_entry_spec(entry, state)
             local response
             if entry.handler then
@@ -648,17 +619,16 @@ function M.run_linear(paths, ctx)
             elseif dispatcher then
                 response = dispatcher(path, spec, ctx)
             else
-                error("swarm_frame.run_linear: path " .. path
-                    .. " has no handler and ctx.dispatcher is nil")
+                error("swarm_frame.run_linear: path " .. path .. " has no handler and ctx.dispatcher is nil")
             end
             local v = M.parse_verdict(response)
             if v.status ~= "DONE" then
                 state:log_phase(step_id, v.status, v.reason or v.missing or v.raw)
                 state:commit()
                 ctx.result = {
-                    status      = v.status,
-                    reason      = v.reason,
-                    missing     = v.missing,
+                    status = v.status,
+                    reason = v.reason,
+                    missing = v.missing,
                     raw_verdict = v.raw,
                     failed_path = path,
                 }
@@ -671,8 +641,8 @@ function M.run_linear(paths, ctx)
         end
     end
     ctx.result = {
-        status            = "DONE",
-        [artifacts_key]   = state:get(artifacts_key),
+        status = "DONE",
+        [artifacts_key] = state:get(artifacts_key),
     }
     return ctx
 end
@@ -689,8 +659,7 @@ local function resolve_mode(explicit)
 end
 
 M._warn_sink = function(reason, ctx_hint)
-    io.stderr:write(string.format("[swarm_frame.validate WARN] %s: %s\n",
-        ctx_hint or "", reason))
+    io.stderr:write(string.format("[swarm_frame.validate WARN] %s: %s\n", ctx_hint or "", reason))
 end
 
 function M.set_warn_sink(fn) M._warn_sink = fn end
@@ -699,19 +668,15 @@ function M.validate(value, schema, ctx_hint, mode)
     local resolved = resolve_mode(mode)
     if resolved == "off" then return value end
     local lshape_ok, lshape = pcall(require, "lshape")
-    if not lshape_ok then
-        error("swarm_frame.validate: lshape not available (install via alc_pkg_link)")
-    end
+    if not lshape_ok then error("swarm_frame.validate: lshape not available (install via alc_pkg_link)") end
     local check = lshape.check
     if resolved == "strict" then
         return check.assert(value, schema, ctx_hint)
     elseif resolved == "dev" then
         return check.assert_dev(value, schema, ctx_hint)
-    else  -- "warn" (default)
+    else -- "warn" (default)
         local ok, reason = check.check(value, schema)
-        if not ok and M._warn_sink then
-            M._warn_sink(reason, ctx_hint)
-        end
+        if not ok and M._warn_sink then M._warn_sink(reason, ctx_hint) end
         return value
     end
 end

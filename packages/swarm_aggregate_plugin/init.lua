@@ -22,9 +22,9 @@ local M = {}
 M.VERSION = "0.1.0"
 
 M.meta = {
-    name        = "swarm_aggregate_plugin",
-    version     = "0.1.0",
-    category    = "frame_plugin",
+    name = "swarm_aggregate_plugin",
+    version = "0.1.0",
+    category = "frame_plugin",
     description = "Swarm aggregate plugin bridging dmad / moa / reconcile "
         .. "to swarm_frame_algocline.make_dispatcher (initial: dmad only).",
 }
@@ -33,16 +33,14 @@ M.meta = {
 
 local function require_string(v, name, fn)
     if type(v) ~= "string" or v == "" then
-        error("swarm_aggregate_plugin." .. fn .. ": "
-            .. name .. " (non-empty string) required, got " .. type(v), 3)
+        error("swarm_aggregate_plugin." .. fn .. ": " .. name .. " (non-empty string) required, got " .. type(v), 3)
     end
 end
 
 local function require_pos_int(v, name, fn, default)
     if v == nil then return default end
     if type(v) ~= "number" or v < 1 or v ~= math.floor(v) then
-        error("swarm_aggregate_plugin." .. fn .. ": "
-            .. name .. " must be a positive integer, got " .. tostring(v), 3)
+        error("swarm_aggregate_plugin." .. fn .. ": " .. name .. " must be a positive integer, got " .. tostring(v), 3)
     end
     return v
 end
@@ -78,20 +76,16 @@ end
 ---     transcript      : { agent, round, text, prompt, step }[],
 --- }
 function M.run_dmad(opts)
-    if type(opts) ~= "table" then
-        error("swarm_aggregate_plugin.run_dmad: opts table required", 2)
-    end
+    if type(opts) ~= "table" then error("swarm_aggregate_plugin.run_dmad: opts table required", 2) end
     require_string(opts.task, "task", "run_dmad")
 
     local frame = opts.frame or require("swarm_frame")
-    local sfa   = opts.sfa   or require("swarm_frame_algocline")
-    local dmad  = opts.dmad  or require("dmad")
+    local sfa = opts.sfa or require("swarm_frame_algocline")
+    local dmad = opts.dmad or require("dmad")
 
     local n_agents = require_pos_int(opts.n_agents, "n_agents", "run_dmad", 3)
     local n_rounds = require_pos_int(opts.n_rounds, "n_rounds", "run_dmad", 2)
-    local extract_fn = opts.extract_fn or function(text)
-        return dmad.extract_boxed({ text = text })
-    end
+    local extract_fn = opts.extract_fn or function(text) return dmad.extract_boxed({ text = text }) end
 
     local state = opts.state or frame.state_new()
 
@@ -105,11 +99,11 @@ function M.run_dmad(opts)
         after_dispatch = function(response, spec, ctx)
             total_calls = total_calls + 1
             table.insert(transcript, {
-                agent  = spec.agent_idx,
-                round  = spec.round_idx,
-                step   = ctx.step,
+                agent = spec.agent_idx,
+                round = spec.round_idx,
+                step = ctx.step,
                 prompt = spec.prompt,
-                text   = response,
+                text = response,
             })
         end,
     }
@@ -123,22 +117,22 @@ function M.run_dmad(opts)
 
     local llm_opts = {}
     if opts.system_prompt then llm_opts.system = opts.system_prompt end
-    if opts.gen_tokens   then llm_opts.max_tokens  = opts.gen_tokens end
-    if opts.temperature  then llm_opts.temperature = opts.temperature end
+    if opts.gen_tokens then llm_opts.max_tokens = opts.gen_tokens end
+    if opts.temperature then llm_opts.temperature = opts.temperature end
 
     local dispatcher = sfa.make_dispatcher({
-        builder  = function(_step, spec)
+        builder = function(_step, spec)
             -- We pre-build the prompt (using dmad's pure helpers) and
             -- attach it on spec.prompt; the builder only forwards it.
             -- Keeps prompt construction visible at the orch site rather
             -- than buried in a closure here.
             return spec.prompt
         end,
-        state    = state,
+        state = state,
         llm_opts = llm_opts,
-        alc      = opts.alc,
-        flow     = opts.flow,
-        plugins  = plugins,
+        alc = opts.alc,
+        flow = opts.flow,
+        plugins = plugins,
     })
 
     -- responses[r+1][i] mirrors dmad.run's output shape so callers
@@ -149,12 +143,12 @@ function M.run_dmad(opts)
     responses[1] = {}
     for i = 1, n_agents do
         local pb = dmad.build_init_prompt({
-            task          = opts.task,
-            init_prompt   = opts.init_prompt,
+            task = opts.task,
+            init_prompt = opts.init_prompt,
             system_prompt = opts.system_prompt,
         })
         local spec = {
-            prompt    = pb.prompt,
+            prompt = pb.prompt,
             agent_idx = i,
             round_idx = 0,
             -- pb.system is honored via llm_opts.system globally; if a
@@ -174,25 +168,20 @@ function M.run_dmad(opts)
         for i = 1, n_agents do
             local others = {}
             for j = 1, n_agents do
-                if j ~= i then
-                    table.insert(others, responses[r][j])
-                end
+                if j ~= i then table.insert(others, responses[r][j]) end
             end
             local pb = dmad.build_debate_prompt({
-                task            = opts.task,
+                task = opts.task,
                 other_responses = others,
-                debate_prompt   = opts.debate_prompt,
-                system_prompt   = opts.system_prompt,
+                debate_prompt = opts.debate_prompt,
+                system_prompt = opts.system_prompt,
             })
             local spec = {
-                prompt    = pb.prompt,
+                prompt = pb.prompt,
                 agent_idx = i,
                 round_idx = r,
             }
-            local text = dispatcher(
-                "/dmad/round_" .. r .. "/agent_" .. i,
-                spec
-            )
+            local text = dispatcher("/dmad/round_" .. r .. "/agent_" .. i, spec)
             responses[r + 1][i] = text
         end
     end
@@ -205,14 +194,14 @@ function M.run_dmad(opts)
     local agg = dmad.aggregate_majority({ answers = last_answers })
 
     return {
-        answer          = agg.answer,
-        n_agents        = n_agents,
-        n_rounds        = n_rounds,
+        answer = agg.answer,
+        n_agents = n_agents,
+        n_rounds = n_rounds,
         total_llm_calls = total_calls,
-        responses       = responses,
-        last_answers    = last_answers,
-        tally           = agg.tally,
-        transcript      = transcript,
+        responses = responses,
+        last_answers = last_answers,
+        tally = agg.tally,
+        transcript = transcript,
     }
 end
 
@@ -232,15 +221,10 @@ end
 -- A missing or unknown variant currently maps to "dmad". When moa /
 -- reconcile land we will fail loudly on unknown variants instead.
 function M.run(ctx)
-    if type(ctx) ~= "table" then
-        error("swarm_aggregate_plugin.run: ctx table required", 2)
-    end
+    if type(ctx) ~= "table" then error("swarm_aggregate_plugin.run: ctx table required", 2) end
     local variant = ctx.variant or "dmad"
-    if variant == "dmad" then
-        return M.run_dmad(ctx)
-    end
-    error("swarm_aggregate_plugin.run: unknown variant '" .. tostring(variant)
-        .. "' (supported: dmad)", 2)
+    if variant == "dmad" then return M.run_dmad(ctx) end
+    error("swarm_aggregate_plugin.run: unknown variant '" .. tostring(variant) .. "' (supported: dmad)", 2)
 end
 
 return M

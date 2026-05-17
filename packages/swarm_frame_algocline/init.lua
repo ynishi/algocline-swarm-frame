@@ -42,9 +42,9 @@ local M = {}
 M.VERSION = "0.1.1"
 
 M.meta = {
-    name        = "swarm_frame_algocline",
-    version     = "0.1.1",
-    category    = "frame_primitive",
+    name = "swarm_frame_algocline",
+    version = "0.1.1",
+    category = "frame_primitive",
     description = "Token & Prompt round-trip primitive — routes prompts to "
         .. "flow.llm_bound (strict / format) or alc.llm directly (non-check), "
         .. "with format-mode post-verify for JSON-shape conformance.",
@@ -155,9 +155,7 @@ M.step_id_of = require("swarm_frame").step_id_of
 --- candidate_1 / candidate_2 / ...). The Frame writes them faithfully
 --- without interpreting the group name or the extra Kind names.
 function M.make_dispatcher(opts)
-    if type(opts) ~= "table" then
-        error("swarm_frame_algocline.make_dispatcher: opts table required")
-    end
+    if type(opts) ~= "table" then error("swarm_frame_algocline.make_dispatcher: opts table required") end
     if type(opts.builder) ~= "function" then
         error("swarm_frame_algocline.make_dispatcher: opts.builder must be a function")
     end
@@ -165,12 +163,12 @@ function M.make_dispatcher(opts)
         error("swarm_frame_algocline.make_dispatcher: opts.state (algocline flow state) required")
     end
 
-    local flow_pkg  = opts.flow  or require("flow")
+    local flow_pkg = opts.flow or require("flow")
     local frame_pkg = opts.frame or require("swarm_frame")
-    local alc_pkg   = opts.alc   or _G.alc
-    local builder   = opts.builder
-    local state     = opts.state
-    local llm_opts  = opts.llm_opts  -- forwarded verbatim; may be nil
+    local alc_pkg = opts.alc or _G.alc
+    local builder = opts.builder
+    local state = opts.state
+    local llm_opts = opts.llm_opts -- forwarded verbatim; may be nil
 
     -- Opaque extension dict. The adapter never reads from it; it is
     -- handed back to the caller via `dispatcher.extras` so plugins /
@@ -203,34 +201,40 @@ function M.make_dispatcher(opts)
     -- Frame does not intercept actual writes (Lua proxy overhead is
     -- not worth it for the per-dispatch hot path; declaration-only
     -- discipline is the same camp as pluggy hookspec/hookimpl).
-    local spec_writes_registry  = {}  -- { [field] = { plugin_name, ... } }
-    local state_writes_registry = {}  -- { [key]   = { plugin_name, ... } }
+    local spec_writes_registry = {} -- { [field] = { plugin_name, ... } }
+    local state_writes_registry = {} -- { [key]   = { plugin_name, ... } }
     for i, p in ipairs(plugins) do
         if type(p) ~= "table" then
-            error("swarm_frame_algocline.make_dispatcher: plugins["
-                .. i .. "] must be a table, got " .. type(p))
+            error("swarm_frame_algocline.make_dispatcher: plugins[" .. i .. "] must be a table, got " .. type(p))
         end
         if type(p.name) ~= "string" or p.name == "" then
-            error("swarm_frame_algocline.make_dispatcher: plugins["
-                .. i .. "].name must be a non-empty string")
+            error("swarm_frame_algocline.make_dispatcher: plugins[" .. i .. "].name must be a non-empty string")
         end
         for _, hk in ipairs({ "before_dispatch", "around_dispatch", "after_dispatch", "finalize" }) do
             if p[hk] ~= nil and type(p[hk]) ~= "function" then
-                error("swarm_frame_algocline.make_dispatcher: plugins["
-                    .. i .. "]." .. hk .. " must be a function or nil")
+                error(
+                    "swarm_frame_algocline.make_dispatcher: plugins[" .. i .. "]." .. hk .. " must be a function or nil"
+                )
             end
         end
         -- C2: optional spec_writes declaration (list of spec field names)
         if p.spec_writes ~= nil then
             if type(p.spec_writes) ~= "table" then
-                error("swarm_frame_algocline.make_dispatcher: plugins["
-                    .. i .. "].spec_writes must be a list of strings or nil")
+                error(
+                    "swarm_frame_algocline.make_dispatcher: plugins["
+                        .. i
+                        .. "].spec_writes must be a list of strings or nil"
+                )
             end
             for j, f in ipairs(p.spec_writes) do
                 if type(f) ~= "string" or f == "" then
-                    error("swarm_frame_algocline.make_dispatcher: plugins["
-                        .. i .. "].spec_writes[" .. j
-                        .. "] must be a non-empty string")
+                    error(
+                        "swarm_frame_algocline.make_dispatcher: plugins["
+                            .. i
+                            .. "].spec_writes["
+                            .. j
+                            .. "] must be a non-empty string"
+                    )
                 end
                 spec_writes_registry[f] = spec_writes_registry[f] or {}
                 table.insert(spec_writes_registry[f], p.name)
@@ -239,19 +243,32 @@ function M.make_dispatcher(opts)
         -- C2: optional state_writes declaration (list of state.data._* keys)
         if p.state_writes ~= nil then
             if type(p.state_writes) ~= "table" then
-                error("swarm_frame_algocline.make_dispatcher: plugins["
-                    .. i .. "].state_writes must be a list of strings or nil")
+                error(
+                    "swarm_frame_algocline.make_dispatcher: plugins["
+                        .. i
+                        .. "].state_writes must be a list of strings or nil"
+                )
             end
             for j, k in ipairs(p.state_writes) do
                 if type(k) ~= "string" or k == "" then
-                    error("swarm_frame_algocline.make_dispatcher: plugins["
-                        .. i .. "].state_writes[" .. j
-                        .. "] must be a non-empty string")
+                    error(
+                        "swarm_frame_algocline.make_dispatcher: plugins["
+                            .. i
+                            .. "].state_writes["
+                            .. j
+                            .. "] must be a non-empty string"
+                    )
                 end
                 if not k:match("^_") then
-                    error("swarm_frame_algocline.make_dispatcher: plugins["
-                        .. i .. "].state_writes[" .. j .. "]=" .. k
-                        .. " must start with '_' (state.data._* namespace convention)")
+                    error(
+                        "swarm_frame_algocline.make_dispatcher: plugins["
+                            .. i
+                            .. "].state_writes["
+                            .. j
+                            .. "]="
+                            .. k
+                            .. " must start with '_' (state.data._* namespace convention)"
+                    )
                 end
                 state_writes_registry[k] = state_writes_registry[k] or {}
                 table.insert(state_writes_registry[k], p.name)
@@ -266,15 +283,22 @@ function M.make_dispatcher(opts)
     -- declared overlaps catches the typical typo / accidental land grab.
     local function warn_collisions(registry, kind)
         for field, owners in pairs(registry) do
-            if #owners > 1 and type(alc_pkg) == "table"
-                and type(alc_pkg.log) == "function" then
-                alc_pkg.log("warn", "swarm_frame_algocline: " .. kind
-                    .. " collision on '" .. field .. "' declared by "
-                    .. #owners .. " plugins: " .. table.concat(owners, ", "))
+            if #owners > 1 and type(alc_pkg) == "table" and type(alc_pkg.log) == "function" then
+                alc_pkg.log(
+                    "warn",
+                    "swarm_frame_algocline: "
+                        .. kind
+                        .. " collision on '"
+                        .. field
+                        .. "' declared by "
+                        .. #owners
+                        .. " plugins: "
+                        .. table.concat(owners, ", ")
+                )
             end
         end
     end
-    warn_collisions(spec_writes_registry,  "spec_writes")
+    warn_collisions(spec_writes_registry, "spec_writes")
     warn_collisions(state_writes_registry, "state_writes")
 
     -- C3: route_llm — shared check_mode-aware routing primitive. Both
@@ -286,14 +310,16 @@ function M.make_dispatcher(opts)
         local mode = frame_pkg.check_mode()
         if mode == "non-check" then
             if type(alc_pkg) ~= "table" or type(alc_pkg.llm) ~= "function" then
-                error("swarm_frame_algocline: alc.llm is not available "
-                    .. "(non-check mode requires opts.alc or _G.alc.llm)")
+                error(
+                    "swarm_frame_algocline: alc.llm is not available "
+                        .. "(non-check mode requires opts.alc or _G.alc.llm)"
+                )
             end
             return alc_pkg.llm(prompt, effective_opts)
-        else  -- "strict" or "format": through flow.llm_bound
+        else -- "strict" or "format": through flow.llm_bound
             return flow_pkg.llm_bound(state, {
-                slot     = slot,
-                prompt   = prompt,
+                slot = slot,
+                prompt = prompt,
                 llm_opts = effective_opts,
             })
         end
@@ -314,8 +340,9 @@ function M.make_dispatcher(opts)
     local function core_dispatch(spec, ctx)
         local prompt = builder(ctx.step, spec)
         if type(prompt) ~= "string" then
-            error("swarm_frame_algocline: builder must return a string (got "
-                .. type(prompt) .. ") for step=" .. ctx.step)
+            error(
+                "swarm_frame_algocline: builder must return a string (got " .. type(prompt) .. ") for step=" .. ctx.step
+            )
         end
 
         -- Compute effective llm_opts. spec.llm_opts_overlay (if present)
@@ -326,15 +353,23 @@ function M.make_dispatcher(opts)
         if type(spec) == "table" and spec.llm_opts_overlay ~= nil then
             local overlay = spec.llm_opts_overlay
             if type(overlay) ~= "table" then
-                error("swarm_frame_algocline: spec.llm_opts_overlay must be "
-                    .. "a table or nil (got " .. type(overlay)
-                    .. ") for step=" .. ctx.step)
+                error(
+                    "swarm_frame_algocline: spec.llm_opts_overlay must be "
+                        .. "a table or nil (got "
+                        .. type(overlay)
+                        .. ") for step="
+                        .. ctx.step
+                )
             end
             effective_llm_opts = {}
             if type(llm_opts) == "table" then
-                for k, v in pairs(llm_opts) do effective_llm_opts[k] = v end
+                for k, v in pairs(llm_opts) do
+                    effective_llm_opts[k] = v
+                end
             end
-            for k, v in pairs(overlay) do effective_llm_opts[k] = v end
+            for k, v in pairs(overlay) do
+                effective_llm_opts[k] = v
+            end
         end
 
         local mode = frame_pkg.check_mode()
@@ -342,17 +377,19 @@ function M.make_dispatcher(opts)
 
         if mode == "format" then
             local resp_str = type(response) == "string" and response or ""
-            local obj_str  = resp_str:match("(%b{})")
-            if not obj_str then
-                return "BLOCKED reason=format-non-json slot=" .. ctx.step
-            end
+            local obj_str = resp_str:match("(%b{})")
+            if not obj_str then return "BLOCKED reason=format-non-json slot=" .. ctx.step end
             local ok, obj = pcall(frame_pkg.json_decode, obj_str)
             if not ok or type(obj) ~= "table" then
                 local snippet = obj_str:sub(1, 120):gsub("\n", "\\n")
                 local err_str = tostring(obj):sub(1, 80)
                 return "BLOCKED reason=format-json-parse-error "
-                    .. "(snippet=" .. snippet .. " err=" .. err_str
-                    .. ") slot=" .. ctx.step
+                    .. "(snippet="
+                    .. snippet
+                    .. " err="
+                    .. err_str
+                    .. ") slot="
+                    .. ctx.step
             end
             if type(obj.status) ~= "string" or obj.status == "" then
                 return "BLOCKED reason=format-missing-status slot=" .. ctx.step
@@ -365,7 +402,11 @@ function M.make_dispatcher(opts)
             end
             if obj.flow_slot ~= ctx.step then
                 return "BLOCKED reason=format-flow-slot-mismatch (expected="
-                    .. ctx.step .. " got=" .. tostring(obj.flow_slot) .. ") slot=" .. ctx.step
+                    .. ctx.step
+                    .. " got="
+                    .. tostring(obj.flow_slot)
+                    .. ") slot="
+                    .. ctx.step
             end
         end
 
@@ -384,18 +425,19 @@ function M.make_dispatcher(opts)
         finalize_opts = finalize_opts or {}
         local pkg_name = finalize_opts.pkg_name
         if type(pkg_name) ~= "string" or pkg_name == "" then
-            error("swarm_frame_algocline: dispatcher.finalize: "
-                .. "opts.pkg_name (non-empty string) required")
+            error("swarm_frame_algocline: dispatcher.finalize: " .. "opts.pkg_name (non-empty string) required")
         end
 
         if type(alc_pkg) ~= "table" or type(alc_pkg.card) ~= "table" then
-            error("swarm_frame_algocline: dispatcher.finalize: "
-                .. "alc.card primitive not available (opts.alc or _G.alc missing)")
+            error(
+                "swarm_frame_algocline: dispatcher.finalize: "
+                    .. "alc.card primitive not available (opts.alc or _G.alc missing)"
+            )
         end
 
-        local data       = (type(state) == "table" and state.data) or {}
-        local task_id    = data.task_id     or "unknown"
-        local task_dir   = data.task_dir
+        local data = (type(state) == "table" and state.data) or {}
+        local task_id = data.task_id or "unknown"
+        local task_dir = data.task_dir
         local run_status = data._run_status or "done"
 
         -- C3: 2-phase staged commit (Issue 2 partial commit semantics).
@@ -411,7 +453,7 @@ function M.make_dispatcher(opts)
         -- Phase 2 (write): iterate the collected payload list, do
         -- card.create + write_samples per entry. Failures here are
         -- best-effort warn (algocline-side has no rollback API).
-        local to_write = {}  -- list of { plugin, group_name, payload, samples }
+        local to_write = {} -- list of { plugin, group_name, payload, samples }
 
         for _, p in ipairs(plugins) do
             if type(p.finalize) ~= "function" then
@@ -420,9 +462,14 @@ function M.make_dispatcher(opts)
                 local ok_f, result = pcall(p.finalize, state)
                 if not ok_f then
                     if alc_pkg.log then
-                        alc_pkg.log("warn", "swarm_frame_algocline: "
-                            .. "plugin[" .. p.name .. "].finalize raised: "
-                            .. tostring(result))
+                        alc_pkg.log(
+                            "warn",
+                            "swarm_frame_algocline: "
+                                .. "plugin["
+                                .. p.name
+                                .. "].finalize raised: "
+                                .. tostring(result)
+                        )
                     end
                 elseif type(result) == "table" and type(result.groups) == "table" then
                     for group_name, samples in pairs(result.groups) do
@@ -437,18 +484,18 @@ function M.make_dispatcher(opts)
                             -- structured data that does not fit the
                             -- structured 5-field schema.
                             local payload = {
-                                pkg      = { name = pkg_name },
-                                model    = { id   = pkg_name },
-                                params   = { variant = group_name },
+                                pkg = { name = pkg_name },
+                                model = { id = pkg_name },
+                                params = { variant = group_name },
                                 scenario = { name = task_id },
                                 metadata = {
-                                    trace_id   = task_id,
-                                    task_dir   = task_dir,
-                                    plugin     = p.name,
-                                    group      = group_name,
+                                    trace_id = task_id,
+                                    task_dir = task_dir,
+                                    plugin = p.name,
+                                    group = group_name,
                                     run_status = run_status,
                                 },
-                                extra    = {},
+                                extra = {},
                             }
                             -- Plugin-supplied params: merged into
                             -- payload.params (per-key override of the
@@ -475,22 +522,26 @@ function M.make_dispatcher(opts)
                             -- with a warn log.
                             if type(result.extra) == "table" then
                                 for kind, value in pairs(result.extra) do
-                                    if payload.extra[kind] ~= nil
-                                        and alc_pkg.log then
-                                        alc_pkg.log("warn", "swarm_frame_algocline: "
-                                            .. "plugin[" .. p.name
-                                            .. "] overrides extra["
-                                            .. tostring(kind) .. "] already set "
-                                            .. "(last wins)")
+                                    if payload.extra[kind] ~= nil and alc_pkg.log then
+                                        alc_pkg.log(
+                                            "warn",
+                                            "swarm_frame_algocline: "
+                                                .. "plugin["
+                                                .. p.name
+                                                .. "] overrides extra["
+                                                .. tostring(kind)
+                                                .. "] already set "
+                                                .. "(last wins)"
+                                        )
                                     end
                                     payload.extra[kind] = value
                                 end
                             end
                             to_write[#to_write + 1] = {
-                                plugin     = p,
+                                plugin = p,
                                 group_name = group_name,
-                                payload    = payload,
-                                samples    = samples,
+                                payload = payload,
+                                samples = samples,
                             }
                         end
                     end
@@ -501,36 +552,54 @@ function M.make_dispatcher(opts)
         -- Phase 2: write all collected payloads (best-effort per card).
         local written = {}
         for _, entry in ipairs(to_write) do
-            local pname      = entry.plugin.name
+            local pname = entry.plugin.name
             local group_name = entry.group_name
-            local payload    = entry.payload
-            local samples    = entry.samples
+            local payload = entry.payload
+            local samples = entry.samples
             local ok_c, card_or_err = pcall(alc_pkg.card.create, payload)
-            if ok_c and type(card_or_err) == "table"
-                and card_or_err.card_id then
+            if ok_c and type(card_or_err) == "table" and card_or_err.card_id then
                 local card = card_or_err
-                local ok_s, err_s = pcall(
-                    alc_pkg.card.write_samples,
-                    card.card_id, samples)
+                local ok_s, err_s = pcall(alc_pkg.card.write_samples, card.card_id, samples)
                 if not ok_s and alc_pkg.log then
-                    alc_pkg.log("warn", "swarm_frame_algocline: "
-                        .. "card.write_samples[" .. pname
-                        .. "/" .. group_name .. "] failed: "
-                        .. tostring(err_s))
+                    alc_pkg.log(
+                        "warn",
+                        "swarm_frame_algocline: "
+                            .. "card.write_samples["
+                            .. pname
+                            .. "/"
+                            .. group_name
+                            .. "] failed: "
+                            .. tostring(err_s)
+                    )
                 end
                 if alc_pkg.log then
-                    alc_pkg.log("info", "swarm_frame_algocline: "
-                        .. "card[" .. pname .. "/" .. group_name
-                        .. "] finalized " .. tostring(card.card_id)
-                        .. " (n=" .. #samples .. ")")
+                    alc_pkg.log(
+                        "info",
+                        "swarm_frame_algocline: "
+                            .. "card["
+                            .. pname
+                            .. "/"
+                            .. group_name
+                            .. "] finalized "
+                            .. tostring(card.card_id)
+                            .. " (n="
+                            .. #samples
+                            .. ")"
+                    )
                 end
                 written[#written + 1] = card
             else
                 if alc_pkg.log then
-                    alc_pkg.log("warn", "swarm_frame_algocline: "
-                        .. "card.create[" .. pname .. "/"
-                        .. group_name .. "] failed: "
-                        .. tostring(card_or_err))
+                    alc_pkg.log(
+                        "warn",
+                        "swarm_frame_algocline: "
+                            .. "card.create["
+                            .. pname
+                            .. "/"
+                            .. group_name
+                            .. "] failed: "
+                            .. tostring(card_or_err)
+                    )
                 end
             end
         end
@@ -546,10 +615,10 @@ function M.make_dispatcher(opts)
     --   dispatcher.spec_writes      declared spec-field contracts (C2)
     --   dispatcher.state_writes     declared state.data._* contracts (C2)
     return setmetatable({
-        extras       = extras,
-        plugins      = plugins,
-        finalize     = finalize_cards,
-        spec_writes  = spec_writes_registry,
+        extras = extras,
+        plugins = plugins,
+        finalize = finalize_cards,
+        spec_writes = spec_writes_registry,
         state_writes = state_writes_registry,
     }, {
         __call = function(_self, path_or_step, spec, _ctx)
@@ -561,14 +630,14 @@ function M.make_dispatcher(opts)
             -- here — Phase 2 separates the two state layers under
             -- distinct names to avoid namespace collision.
             local ctx = _ctx or {}
-            ctx.path       = path_or_step
-            ctx.step       = frame_pkg.step_id_of(path_or_step)
+            ctx.path = path_or_step
+            ctx.step = frame_pkg.step_id_of(path_or_step)
             ctx.flow_state = state
-            ctx.extras     = extras
-            ctx.scratch    = ctx.scratch or {}
+            ctx.extras = extras
+            ctx.scratch = ctx.scratch or {}
             -- Expose frame to plugins that may need parse_verdict in
             -- around_dispatch (cascade / reflexion etc.).
-            ctx.frame      = frame_pkg
+            ctx.frame = frame_pkg
 
             -- C3: ctx.llm_call — auxiliary LLM call routed through the
             -- Frame's check_mode-aware route_llm helper. Plugins that
@@ -590,28 +659,39 @@ function M.make_dispatcher(opts)
             -- verdict. Callers handle the response shape themselves.
             ctx.llm_call = function(call_opts)
                 if type(call_opts) ~= "table" then
-                    error("swarm_frame_algocline: ctx.llm_call requires "
-                        .. "an opts table (got " .. type(call_opts) .. ")")
+                    error(
+                        "swarm_frame_algocline: ctx.llm_call requires "
+                            .. "an opts table (got "
+                            .. type(call_opts)
+                            .. ")"
+                    )
                 end
                 local call_prompt = call_opts.prompt
                 if type(call_prompt) ~= "string" or call_prompt == "" then
-                    error("swarm_frame_algocline: ctx.llm_call: "
-                        .. "opts.prompt (non-empty string) required")
+                    error("swarm_frame_algocline: ctx.llm_call: " .. "opts.prompt (non-empty string) required")
                 end
                 local call_slot = call_opts.slot or (ctx.step .. ":aux")
-                local overlay   = call_opts.llm_opts_overlay
+                local overlay = call_opts.llm_opts_overlay
                 local effective = llm_opts
                 if overlay ~= nil then
                     if type(overlay) ~= "table" then
-                        error("swarm_frame_algocline: ctx.llm_call: "
-                            .. "llm_opts_overlay must be a table or nil "
-                            .. "(got " .. type(overlay) .. ")")
+                        error(
+                            "swarm_frame_algocline: ctx.llm_call: "
+                                .. "llm_opts_overlay must be a table or nil "
+                                .. "(got "
+                                .. type(overlay)
+                                .. ")"
+                        )
                     end
                     effective = {}
                     if type(llm_opts) == "table" then
-                        for k, v in pairs(llm_opts) do effective[k] = v end
+                        for k, v in pairs(llm_opts) do
+                            effective[k] = v
+                        end
                     end
-                    for k, v in pairs(overlay) do effective[k] = v end
+                    for k, v in pairs(overlay) do
+                        effective[k] = v
+                    end
                 end
                 return route_llm(call_prompt, effective, call_slot)
             end
@@ -629,11 +709,9 @@ function M.make_dispatcher(opts)
             for i = #plugins, 1, -1 do
                 local p = plugins[i]
                 if p.around_dispatch then
-                    local inner   = wrapped
-                    local this_p  = p
-                    wrapped = function(s, c)
-                        return this_p.around_dispatch(inner, s, c)
-                    end
+                    local inner = wrapped
+                    local this_p = p
+                    wrapped = function(s, c) return this_p.around_dispatch(inner, s, c) end
                 end
             end
 
@@ -652,13 +730,13 @@ function M.make_dispatcher(opts)
             -- Plugins must capture anything they need via closure
             -- variables during the hook calls; reading these fields
             -- outside the dispatch is not supported.
-            ctx.path       = nil
-            ctx.step       = nil
+            ctx.path = nil
+            ctx.step = nil
             ctx.flow_state = nil
-            ctx.extras     = nil
-            ctx.scratch    = nil
-            ctx.frame      = nil
-            ctx.llm_call   = nil
+            ctx.extras = nil
+            ctx.scratch = nil
+            ctx.frame = nil
+            ctx.llm_call = nil
 
             return response or ""
         end,

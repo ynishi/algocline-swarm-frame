@@ -10,12 +10,8 @@ local frame = require("swarm_frame")
 local describe, it, expect = lust.describe, lust.it, lust.expect
 
 describe("host seam", function()
-    lust.before(function()
-        frame._reset_host_for_testing()
-    end)
-    lust.after(function()
-        frame._reset_host_for_testing()
-    end)
+    lust.before(function() frame._reset_host_for_testing() end)
+    lust.after(function() frame._reset_host_for_testing() end)
 
     -- ─── (a) M.host explicit injection ───────────────────────────────────────
 
@@ -39,30 +35,22 @@ describe("host seam", function()
 
         it("raises an error when M.host lacks encode", function()
             frame.host = { decode = function(s) return {} end }
-            expect(function()
-                frame.json_encode({})
-            end).to.fail()
+            expect(function() frame.json_encode({}) end).to.fail()
         end)
 
         it("raises an error when M.host lacks decode", function()
             frame.host = { encode = function(t) return "{}" end }
-            expect(function()
-                frame.json_decode("{}")
-            end).to.fail()
+            expect(function() frame.json_decode("{}") end).to.fail()
         end)
 
         it("raises an error when M.host is a non-table", function()
             frame.host = "invalid"
-            expect(function()
-                frame.json_encode({})
-            end).to.fail()
+            expect(function() frame.json_encode({}) end).to.fail()
         end)
 
         it("error message mentions encode and decode", function()
             frame.host = { encode = 42, decode = function(s) return {} end }
-            expect(function()
-                frame.json_encode({})
-            end).to.fail.with("encode and decode")
+            expect(function() frame.json_encode({}) end).to.fail.with("encode and decode")
         end)
     end)
 
@@ -104,8 +92,14 @@ describe("host seam", function()
         it("does NOT use _G.alc when M.host is set", function()
             local alc_called = false
             _G.alc = {
-                json_encode = function(t) alc_called = true return "ALC" end,
-                json_decode = function(s) alc_called = true return {} end,
+                json_encode = function(t)
+                    alc_called = true
+                    return "ALC"
+                end,
+                json_decode = function(s)
+                    alc_called = true
+                    return {}
+                end,
             }
             frame.host = {
                 encode = function(t) return "HOST_ENCODE" end,

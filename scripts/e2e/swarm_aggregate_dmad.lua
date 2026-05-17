@@ -36,13 +36,14 @@ package.path = "scripts/e2e/?.lua;" .. package.path
 local common = require("common")
 
 local params = {
-    task     = "What is the answer to life, the universe, and everything? Reply with the canonical Hitchhiker's Guide value.",
-    variant  = "dmad",
+    task = "What is the answer to life, the universe, and everything? Reply with the canonical Hitchhiker's Guide value.",
+    variant = "dmad",
     n_agents = 3,
     n_rounds = 2,
 }
 
-local prompt = string.format([[
+local prompt = string.format(
+    [[
 Run swarm_aggregate_plugin via alc_advice:
 - package: "swarm_aggregate_plugin"
 - task: %q
@@ -60,17 +61,20 @@ When done, output one short report containing:
 Use those exact keys (snake_case) so post-hoc graders can locate
 them. Keep the report under 200 words.
 ]],
-    params.task, params.variant, params.n_agents, params.n_rounds
+    params.task,
+    params.variant,
+    params.n_agents,
+    params.n_rounds
 )
 
 common.run({
-    name           = "swarm_aggregate_dmad",
-    prompt         = prompt,
-    params         = params,
-    max_iterations = 50,    -- 9 dmad turns × variable ReAct exploration
-                            -- per turn; 30 was tight, 50 gives headroom
-                            -- without 100× cost blow-up (see common.lua
-                            -- DEFAULTS for the cost-side discussion).
+    name = "swarm_aggregate_dmad",
+    prompt = prompt,
+    params = params,
+    max_iterations = 50, -- 9 dmad turns × variable ReAct exploration
+    -- per turn; 30 was tight, 50 gives headroom
+    -- without 100× cost blow-up (see common.lua
+    -- DEFAULTS for the cost-side discussion).
     graders = {
         common.grader_agent_ok(),
         common.grader_content_contains("42"),
@@ -88,14 +92,9 @@ common.run({
             check = function(result)
                 if not result.ok then return false, "agent failed" end
                 local c = (result.content or ""):lower()
-                local mentions_key = c:find("total_llm_calls", 1, true)
-                    or c:find("total llm calls", 1, true)
-                if not mentions_key then
-                    return false, "total_llm_calls / 'Total LLM Calls' not mentioned"
-                end
-                if c:find("9", 1, true) or c:find("nine", 1, true) then
-                    return true, nil
-                end
+                local mentions_key = c:find("total_llm_calls", 1, true) or c:find("total llm calls", 1, true)
+                if not mentions_key then return false, "total_llm_calls / 'Total LLM Calls' not mentioned" end
+                if c:find("9", 1, true) or c:find("nine", 1, true) then return true, nil end
                 return false, "total_llm_calls != 9 (or '9' not adjacent)"
             end,
         },
@@ -104,13 +103,8 @@ common.run({
             check = function(result)
                 if not result.ok then return false, "agent failed" end
                 local c = (result.content or ""):lower()
-                if not c:find("tally", 1, true) then
-                    return false, "tally not mentioned"
-                end
-                if c:find("count", 1, true)
-                    or c:find("vote", 1, true)
-                    or c:find("answer", 1, true)
-                then
+                if not c:find("tally", 1, true) then return false, "tally not mentioned" end
+                if c:find("count", 1, true) or c:find("vote", 1, true) or c:find("answer", 1, true) then
                     return true, nil
                 end
                 return false, "tally mentioned but no 'count'/'vote'/'answer' nearby"

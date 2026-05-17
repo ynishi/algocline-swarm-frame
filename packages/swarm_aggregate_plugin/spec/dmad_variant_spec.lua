@@ -14,37 +14,27 @@ local describe, it, expect = lust.describe, lust.it, lust.expect
 -- ─── helpers ────────────────────────────────────────────────────────
 
 -- Plain-substring assertion (lust API has no `.contain`).
-local function contains(s, sub)
-    return type(s) == "string" and string.find(s, sub, 1, true) ~= nil
-end
+local function contains(s, sub) return type(s) == "string" and string.find(s, sub, 1, true) ~= nil end
 
 -- Stub flow: non-check mode does not invoke flow.llm_bound, but
 -- sfa.make_dispatcher evaluates `opts.flow or require("flow")` regardless.
 -- Inject a non-nil stub to bypass the require lookup (flow pkg is in
 -- ~/.algocline/packages, outside the alc_pkg_test VM's package.path).
 local stub_flow = {
-    llm_bound = function(_state, _slot_opts)
-        error("stub_flow.llm_bound should not be invoked in non-check mode")
-    end,
+    llm_bound = function(_state, _slot_opts) error("stub_flow.llm_bound should not be invoked in non-check mode") end,
 }
 
 -- ─── mock builders ──────────────────────────────────────────────────
 
 local function make_mock_dmad()
     return {
-        build_init_prompt = function(o)
-            return { prompt = "INIT:" .. (o.task or ""), system = "" }
-        end,
-        build_debate_prompt = function(_o)
-            return { prompt = "DEBATE" }
-        end,
+        build_init_prompt = function(o) return { prompt = "INIT:" .. (o.task or ""), system = "" } end,
+        build_debate_prompt = function(_o) return { prompt = "DEBATE" } end,
         aggregate_majority = function(o)
             local first = (o.answers and o.answers[1]) or ""
             return { answer = first, tally = {} }
         end,
-        extract_boxed = function(o)
-            return o.text or ""
-        end,
+        extract_boxed = function(o) return o.text or "" end,
     }
 end
 
@@ -57,9 +47,7 @@ local function make_mock_alc()
         end,
         log = function(_level, _msg) end,
         -- expose counter for assertions
-        _count = function()
-            return count
-        end,
+        _count = function() return count end,
     }
 end
 

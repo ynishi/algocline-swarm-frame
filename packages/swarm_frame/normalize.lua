@@ -102,14 +102,14 @@ end
 -- ── bulk normalizer ────────────────────────────────────────────────────
 
 local _NORM_TYPES = {
-    ["string"]   = { lua_type = "string",  required = true,  nonempty = true  },
-    ["string?"]  = { lua_type = "string",  required = false, nonempty = false },
-    ["boolean"]  = { lua_type = "boolean", required = true,  nonempty = false },
+    ["string"] = { lua_type = "string", required = true, nonempty = true },
+    ["string?"] = { lua_type = "string", required = false, nonempty = false },
+    ["boolean"] = { lua_type = "boolean", required = true, nonempty = false },
     ["boolean?"] = { lua_type = "boolean", required = false, nonempty = false },
-    ["number"]   = { lua_type = "number",  required = true,  nonempty = false },
-    ["number?"]  = { lua_type = "number",  required = false, nonempty = false },
-    ["table"]    = { lua_type = "table",   required = true,  nonempty = false },
-    ["table?"]   = { lua_type = "table",   required = false, nonempty = false },
+    ["number"] = { lua_type = "number", required = true, nonempty = false },
+    ["number?"] = { lua_type = "number", required = false, nonempty = false },
+    ["table"] = { lua_type = "table", required = true, nonempty = false },
+    ["table?"] = { lua_type = "table", required = false, nonempty = false },
 }
 
 local _PREFIX = "swarm_frame.normalize_ctx: "
@@ -127,26 +127,25 @@ local _PREFIX = "swarm_frame.normalize_ctx: "
 --- @param spec table<string, string>  -- tag ∈ {"string","string?", ...}
 --- @return table  -- same ctx, mutated in place
 function M.normalize_ctx(ctx, spec)
-    assert(type(ctx) == "table",
-        _PREFIX .. "ctx must be a table (got " .. type(ctx) .. ")")
-    assert(type(spec) == "table",
-        _PREFIX .. "spec must be a table (got " .. type(spec) .. ")")
+    assert(type(ctx) == "table", _PREFIX .. "ctx must be a table (got " .. type(ctx) .. ")")
+    assert(type(spec) == "table", _PREFIX .. "spec must be a table (got " .. type(spec) .. ")")
     for field, tag in pairs(spec) do
         local td = _NORM_TYPES[tag]
-        assert(td ~= nil,
-            _PREFIX .. "unknown ctx type tag '" .. tostring(tag)
-            .. "' for field '" .. tostring(field) .. "'")
+        assert(
+            td ~= nil,
+            _PREFIX .. "unknown ctx type tag '" .. tostring(tag) .. "' for field '" .. tostring(field) .. "'"
+        )
         local v = ctx[field]
         if type(v) == td.lua_type then
             if td.nonempty and v == "" then
-                error(_PREFIX .. "ctx." .. tostring(field)
-                    .. " must be a non-empty string", 0)
+                error(_PREFIX .. "ctx." .. tostring(field) .. " must be a non-empty string", 0)
             end
         else
             if td.required then
-                error(_PREFIX .. "ctx." .. tostring(field)
-                    .. " must be " .. td.lua_type
-                    .. " (got " .. type(v) .. ")", 0)
+                error(
+                    _PREFIX .. "ctx." .. tostring(field) .. " must be " .. td.lua_type .. " (got " .. type(v) .. ")",
+                    0
+                )
             end
             ctx[field] = nil
         end

@@ -103,7 +103,9 @@ end
 --- @param detail any  free-form detail payload
 function M.log_phase(pipeline_log, name, status, detail)
     pipeline_log[#pipeline_log + 1] = {
-        name = name, status = status, detail = detail,
+        name = name,
+        status = status,
+        detail = detail,
     }
 end
 

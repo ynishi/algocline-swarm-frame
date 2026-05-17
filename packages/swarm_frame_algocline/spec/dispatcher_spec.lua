@@ -11,18 +11,14 @@ local describe, it, expect = lust.describe, lust.it, lust.expect
 
 -- Plain-substring assertion helper (lust API has no `.contain`, only `.match`
 -- which uses Lua patterns — `.` etc become wildcards).
-local function contains(s, sub)
-    return type(s) == "string" and string.find(s, sub, 1, true) ~= nil
-end
+local function contains(s, sub) return type(s) == "string" and string.find(s, sub, 1, true) ~= nil end
 
 -- Stub flow for tests that don't exercise flow.llm_bound. make_dispatcher
 -- evaluates `opts.flow or require("flow")` unconditionally; we inject a
 -- non-nil stub to short-circuit the require lookup (flow pkg lives in
 -- ~/.algocline/packages and is outside the alc_pkg_test VM's package.path).
 local stub_flow = {
-    llm_bound = function(_state, _slot_opts)
-        error("stub_flow.llm_bound should not be invoked in non-flow tests")
-    end,
+    llm_bound = function(_state, _slot_opts) error("stub_flow.llm_bound should not be invoked in non-flow tests") end,
 }
 
 local function minimal_mock_alc(called)
@@ -74,9 +70,7 @@ describe("make_dispatcher", function()
         it("errors when state is missing", function()
             frame._reset_for_testing()
             local ok, err = pcall(sfa.make_dispatcher, {
-                builder = function(_step, _spec)
-                    return "P"
-                end,
+                builder = function(_step, _spec) return "P" end,
             })
             expect(ok).to.equal(false)
             expect(contains(err, "opts.state")).to.equal(true)
@@ -96,9 +90,7 @@ describe("make_dispatcher", function()
             local mock_alc = minimal_mock_alc(called)
 
             local d = sfa.make_dispatcher({
-                builder = function(step, _spec)
-                    return "PROMPT:" .. step
-                end,
+                builder = function(step, _spec) return "PROMPT:" .. step end,
                 state = frame.state_new(),
                 alc = mock_alc,
                 flow = stub_flow,
@@ -117,9 +109,7 @@ describe("make_dispatcher", function()
             local mock_alc = minimal_mock_alc(called)
 
             local d = sfa.make_dispatcher({
-                builder = function(step, _spec)
-                    return "BARE:" .. step
-                end,
+                builder = function(step, _spec) return "BARE:" .. step end,
                 state = frame.state_new(),
                 alc = mock_alc,
                 flow = stub_flow,
@@ -144,9 +134,7 @@ describe("make_dispatcher", function()
             local mock_flow = minimal_mock_flow(flow_calls)
 
             local d = sfa.make_dispatcher({
-                builder = function(_step, _spec)
-                    return "PROMPT"
-                end,
+                builder = function(_step, _spec) return "PROMPT" end,
                 state = frame.state_new(),
                 flow = mock_flow,
             })
@@ -168,15 +156,11 @@ describe("make_dispatcher", function()
             frame.init({ check_mode = "format" })
 
             local mock_flow = {
-                llm_bound = function(_state, _slot_opts)
-                    return "plain text no braces"
-                end,
+                llm_bound = function(_state, _slot_opts) return "plain text no braces" end,
             }
 
             local d = sfa.make_dispatcher({
-                builder = function(_step, _spec)
-                    return "P"
-                end,
+                builder = function(_step, _spec) return "P" end,
                 state = frame.state_new(),
                 flow = mock_flow,
             })
@@ -191,15 +175,11 @@ describe("make_dispatcher", function()
             frame.init({ check_mode = "format" })
 
             local mock_flow = {
-                llm_bound = function(_state, _slot_opts)
-                    return '{"foo": "bar"}'
-                end,
+                llm_bound = function(_state, _slot_opts) return '{"foo": "bar"}' end,
             }
 
             local d = sfa.make_dispatcher({
-                builder = function(_step, _spec)
-                    return "P"
-                end,
+                builder = function(_step, _spec) return "P" end,
                 state = frame.state_new(),
                 flow = mock_flow,
             })
@@ -219,9 +199,7 @@ describe("make_dispatcher", function()
             }
 
             local d = sfa.make_dispatcher({
-                builder = function(_step, _spec)
-                    return "P"
-                end,
+                builder = function(_step, _spec) return "P" end,
                 state = frame.state_new(),
                 flow = mock_flow,
             })
@@ -243,9 +221,7 @@ describe("make_dispatcher", function()
 
             local called = {}
             local d = sfa.make_dispatcher({
-                builder = function(_step, _spec)
-                    return "P"
-                end,
+                builder = function(_step, _spec) return "P" end,
                 state = frame.state_new(),
                 alc = minimal_mock_alc(called),
                 flow = stub_flow,
@@ -259,9 +235,7 @@ describe("make_dispatcher", function()
         it("errors when opts.extras is not a table", function()
             frame._reset_for_testing()
             local ok, err = pcall(sfa.make_dispatcher, {
-                builder = function(_step, _spec)
-                    return "P"
-                end,
+                builder = function(_step, _spec) return "P" end,
                 state = frame.state_new(),
                 flow = stub_flow,
                 extras = "bad",
@@ -283,16 +257,12 @@ describe("make_dispatcher", function()
             local hook_responses = {}
             local recorder = {
                 name = "test_recorder",
-                after_dispatch = function(response, _spec, _ctx)
-                    table.insert(hook_responses, response)
-                end,
+                after_dispatch = function(response, _spec, _ctx) table.insert(hook_responses, response) end,
             }
 
             local called = {}
             local d = sfa.make_dispatcher({
-                builder = function(_step, _spec)
-                    return "P"
-                end,
+                builder = function(_step, _spec) return "P" end,
                 state = frame.state_new(),
                 alc = minimal_mock_alc(called),
                 flow = stub_flow,

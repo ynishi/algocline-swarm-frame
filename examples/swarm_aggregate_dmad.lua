@@ -17,10 +17,10 @@
 --     ~/projects/algocline-swarm-frame/    ← cwd
 --     ~/projects/algocline-bundled-packages/
 
-package.path = "./packages/?/init.lua;./packages/?.lua;" ..
-               "../algocline-bundled-packages/?/init.lua;" ..
-               "../algocline-bundled-packages/?.lua;" ..
-               package.path
+package.path = "./packages/?/init.lua;./packages/?.lua;"
+    .. "../algocline-bundled-packages/?/init.lua;"
+    .. "../algocline-bundled-packages/?.lua;"
+    .. package.path
 
 -- ── Mock alc.llm ────────────────────────────────────────────────────
 -- Deterministic responder: returns "\boxed{42}" for round 0 agents 1
@@ -50,26 +50,28 @@ _G.alc.llm = mock_llm
 
 -- ── Run ─────────────────────────────────────────────────────────────
 
-local frame  = require("swarm_frame")
+local frame = require("swarm_frame")
 frame.init({ check_mode = "non-check" })
 
 local plugin = require("swarm_aggregate_plugin")
 
 local result = plugin.run_dmad({
-    task     = "What is the answer to life, the universe, and everything?",
+    task = "What is the answer to life, the universe, and everything?",
     n_agents = 3,
     n_rounds = 2,
 })
 
 -- ── Report ──────────────────────────────────────────────────────────
 
-print(string.format(
-    "answer=%s  n_agents=%d  n_rounds=%d  total_llm_calls=%d",
-    tostring(result.answer),
-    result.n_agents,
-    result.n_rounds,
-    result.total_llm_calls
-))
+print(
+    string.format(
+        "answer=%s  n_agents=%d  n_rounds=%d  total_llm_calls=%d",
+        tostring(result.answer),
+        result.n_agents,
+        result.n_rounds,
+        result.total_llm_calls
+    )
+)
 
 print("last_answers:")
 for i, a in ipairs(result.last_answers) do
@@ -81,25 +83,30 @@ for _, row in ipairs(result.tally) do
     print(string.format("  %-6s -> count=%d", tostring(row.answer), row.count))
 end
 
-print(string.format(
-    "transcript: %d entries  (mock LLM was called %d times)",
-    #result.transcript, #call_log
-))
-print("first transcript entry:  agent="
-    .. tostring(result.transcript[1].agent)
-    .. " round=" .. tostring(result.transcript[1].round)
-    .. " step=" .. tostring(result.transcript[1].step))
-print("last  transcript entry:  agent="
-    .. tostring(result.transcript[#result.transcript].agent)
-    .. " round=" .. tostring(result.transcript[#result.transcript].round)
-    .. " step=" .. tostring(result.transcript[#result.transcript].step))
+print(string.format("transcript: %d entries  (mock LLM was called %d times)", #result.transcript, #call_log))
+print(
+    "first transcript entry:  agent="
+        .. tostring(result.transcript[1].agent)
+        .. " round="
+        .. tostring(result.transcript[1].round)
+        .. " step="
+        .. tostring(result.transcript[1].step)
+)
+print(
+    "last  transcript entry:  agent="
+        .. tostring(result.transcript[#result.transcript].agent)
+        .. " round="
+        .. tostring(result.transcript[#result.transcript].round)
+        .. " step="
+        .. tostring(result.transcript[#result.transcript].step)
+)
 
 -- ── Assertion ───────────────────────────────────────────────────────
 -- N + N*R = 3 + 3*2 = 9 calls expected.
-assert(result.total_llm_calls == 9,
-    "expected 9 LLM calls (N=3, R=2 -> N*(R+1)), got "
-    .. tostring(result.total_llm_calls))
-assert(result.answer == "42",
-    "expected majority '42', got " .. tostring(result.answer))
+assert(
+    result.total_llm_calls == 9,
+    "expected 9 LLM calls (N=3, R=2 -> N*(R+1)), got " .. tostring(result.total_llm_calls)
+)
+assert(result.answer == "42", "expected majority '42', got " .. tostring(result.answer))
 
 print("PASS: swarm_aggregate_plugin.run_dmad smoke")

@@ -19,18 +19,14 @@ end
 
 describe("swarm_frame core", function()
     lust.before(function() reset() end)
-    lust.after(function()  reset() end)
+    lust.after(function() reset() end)
 
     -- ─── VERSION ─────────────────────────────────────────────────────────────
 
     describe("VERSION", function()
-        it("is 0.3.0", function()
-            expect(frame.VERSION).to.equal("0.3.0")
-        end)
+        it("is 0.3.0", function() expect(frame.VERSION).to.equal("0.3.0") end)
 
-        it("meta.version matches VERSION", function()
-            expect(frame.meta.version).to.equal(frame.VERSION)
-        end)
+        it("meta.version matches VERSION", function() expect(frame.meta.version).to.equal(frame.VERSION) end)
     end)
 
     -- ─── state_new ───────────────────────────────────────────────────────────
@@ -94,14 +90,10 @@ describe("swarm_frame core", function()
         end)
 
         it("register requires path starting with /", function()
-            expect(function()
-                frame.register("no_slash", {})
-            end).to.fail()
+            expect(function() frame.register("no_slash", {}) end).to.fail()
         end)
 
-        it("resolve returns nil for unknown path", function()
-            expect(frame.resolve("/unknown/path")).to.equal(nil)
-        end)
+        it("resolve returns nil for unknown path", function() expect(frame.resolve("/unknown/path")).to.equal(nil) end)
 
         it("unregister removes a path", function()
             frame.register("/pkg/step_x/agent", {})
@@ -134,9 +126,10 @@ describe("swarm_frame core", function()
     -- ─── step_id_of ─────────────────────────────────────────────────────────
 
     describe("step_id_of", function()
-        it("extracts step id from 3-segment path", function()
-            expect(frame.step_id_of("/pkg/step_1/agent")).to.equal("step_1")
-        end)
+        it(
+            "extracts step id from 3-segment path",
+            function() expect(frame.step_id_of("/pkg/step_1/agent")).to.equal("step_1") end
+        )
 
         it("returns path unchanged for bare paths", function()
             local result = frame.step_id_of("/no_step")
@@ -191,9 +184,7 @@ describe("swarm_frame core", function()
             local s = frame.state_new()
             local ctx = {
                 state = s,
-                dispatcher = function(path, spec, c)
-                    return "DONE path=" .. path
-                end,
+                dispatcher = function(path, spec, c) return "DONE path=" .. path end,
             }
             frame.run_linear({ "/pkg/step_a/agent" }, ctx)
             expect(ctx.result.status).to.equal("DONE")
@@ -205,9 +196,7 @@ describe("swarm_frame core", function()
             local s = frame.state_new()
             local ctx = {
                 state = s,
-                dispatcher = function(path, spec, c)
-                    return "BLOCKED reason=external_dep"
-                end,
+                dispatcher = function(path, spec, c) return "BLOCKED reason=external_dep" end,
             }
             frame.run_linear({ "/pkg/step_b/agent" }, ctx)
             expect(ctx.result.status).to.equal("BLOCKED")
@@ -218,7 +207,7 @@ describe("swarm_frame core", function()
         it("skips already completed steps", function()
             frame.register("/pkg/step_c/agent", {})
             local s = frame.state_new()
-            s:step_mark("step_c")  -- pre-mark as done
+            s:step_mark("step_c") -- pre-mark as done
             local dispatcher_calls = 0
             local ctx = {
                 state = s,
@@ -252,9 +241,7 @@ describe("swarm_frame core", function()
         end)
 
         it("raises when ctx.state is missing", function()
-            expect(function()
-                frame.run_linear({}, {})
-            end).to.fail()
+            expect(function() frame.run_linear({}, {}) end).to.fail()
         end)
     end)
 end)
