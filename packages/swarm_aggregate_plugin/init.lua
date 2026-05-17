@@ -137,6 +137,7 @@ function M.run_dmad(opts)
         state    = state,
         llm_opts = llm_opts,
         alc      = opts.alc,
+        flow     = opts.flow,
         plugins  = plugins,
     })
 

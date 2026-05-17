@@ -3,14 +3,30 @@
 -- DSL 規約: lust global は alc_pkg_test runner が auto-inject する。
 -- package.path 手動設定禁止 (§8-7-36)。
 --
--- opts.alc / opts.frame / opts.sfa / opts.dmad をすべて mock 注入し、
--- 実 LLM / 実 dmad pkg に依存せず走る。
+-- opts.alc / opts.frame / opts.sfa / opts.dmad / opts.flow をすべて mock 注入し、
+-- 実 LLM / 実 dmad pkg / 実 flow pkg に依存せず走る。
 
-local lust = require("lust")
 local agg = require("swarm_aggregate_plugin")
 local frame = require("swarm_frame")
 local sfa = require("swarm_frame_algocline")
 local describe, it, expect = lust.describe, lust.it, lust.expect
+
+-- ─── helpers ────────────────────────────────────────────────────────
+
+-- Plain-substring assertion (lust API has no `.contain`).
+local function contains(s, sub)
+    return type(s) == "string" and string.find(s, sub, 1, true) ~= nil
+end
+
+-- Stub flow: non-check mode does not invoke flow.llm_bound, but
+-- sfa.make_dispatcher evaluates `opts.flow or require("flow")` regardless.
+-- Inject a non-nil stub to bypass the require lookup (flow pkg is in
+-- ~/.algocline/packages, outside the alc_pkg_test VM's package.path).
+local stub_flow = {
+    llm_bound = function(_state, _slot_opts)
+        error("stub_flow.llm_bound should not be invoked in non-check mode")
+    end,
+}
 
 -- ─── mock builders ──────────────────────────────────────────────────
 
@@ -58,19 +74,19 @@ describe("run_dmad", function()
         it("errors when opts is not a table", function()
             local ok, err = pcall(agg.run_dmad, "bad")
             expect(ok).to.equal(false)
-            expect(err).to.contain("opts table required")
+            expect(contains(err, "opts table required")).to.equal(true)
         end)
 
         it("errors when task is missing", function()
             local ok, err = pcall(agg.run_dmad, {})
             expect(ok).to.equal(false)
-            expect(err).to.contain("task")
+            expect(contains(err, "task")).to.equal(true)
         end)
 
         it("errors when task is empty string", function()
             local ok, err = pcall(agg.run_dmad, { task = "" })
             expect(ok).to.equal(false)
-            expect(err).to.contain("task")
+            expect(contains(err, "task")).to.equal(true)
         end)
     end)
 
@@ -94,6 +110,7 @@ describe("run_dmad", function()
                 sfa = sfa,
                 dmad = mock_dmad,
                 alc = mock_alc,
+                flow = stub_flow,
             })
 
             -- return shape
@@ -128,6 +145,7 @@ describe("run_dmad", function()
                 sfa = sfa,
                 dmad = make_mock_dmad(),
                 alc = counting_alc,
+                flow = stub_flow,
             })
 
             -- round 0: 3 calls; round 1: 3 calls; round 2: 3 calls → 9 total
@@ -146,6 +164,7 @@ describe("run_dmad", function()
                 sfa = sfa,
                 dmad = make_mock_dmad(),
                 alc = make_mock_alc(),
+                flow = stub_flow,
             })
 
             -- responses[1] = round 0, responses[2] = round 1
@@ -166,6 +185,7 @@ describe("run_dmad", function()
                 sfa = sfa,
                 dmad = make_mock_dmad(),
                 alc = make_mock_alc(),
+                flow = stub_flow,
             })
 
             -- 2 agents × (1+1) rounds = 4 calls
@@ -197,6 +217,7 @@ describe("run_dmad", function()
                 sfa = sfa,
                 dmad = make_mock_dmad(),
                 alc = make_mock_alc(),
+                flow = stub_flow,
             })
 
             expect(type(r.answer)).to.equal("string")
@@ -215,6 +236,7 @@ describe("run_dmad", function()
                 sfa = sfa,
                 dmad = make_mock_dmad(),
                 alc = make_mock_alc(),
+                flow = stub_flow,
             })
 
             expect(type(r.answer)).to.equal("string")
@@ -226,7 +248,7 @@ describe("run_dmad", function()
                 variant = "unknown_algo",
             })
             expect(ok).to.equal(false)
-            expect(err).to.contain("unknown variant")
+            expect(contains(err, "unknown variant")).to.equal(true)
         end)
     end)
 end)

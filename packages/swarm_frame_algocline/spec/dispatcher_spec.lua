@@ -3,12 +3,27 @@
 -- DSL 規約: lust global は alc_pkg_test runner が auto-inject する。
 -- package.path 手動設定禁止 (§8-7-36)。
 
-local lust = require("lust")
 local sfa = require("swarm_frame_algocline")
 local frame = require("swarm_frame")
 local describe, it, expect = lust.describe, lust.it, lust.expect
 
 -- ─── helpers ────────────────────────────────────────────────────────
+
+-- Plain-substring assertion helper (lust API has no `.contain`, only `.match`
+-- which uses Lua patterns — `.` etc become wildcards).
+local function contains(s, sub)
+    return type(s) == "string" and string.find(s, sub, 1, true) ~= nil
+end
+
+-- Stub flow for tests that don't exercise flow.llm_bound. make_dispatcher
+-- evaluates `opts.flow or require("flow")` unconditionally; we inject a
+-- non-nil stub to short-circuit the require lookup (flow pkg lives in
+-- ~/.algocline/packages and is outside the alc_pkg_test VM's package.path).
+local stub_flow = {
+    llm_bound = function(_state, _slot_opts)
+        error("stub_flow.llm_bound should not be invoked in non-flow tests")
+    end,
+}
 
 local function minimal_mock_alc(called)
     called = called or {}
@@ -44,7 +59,7 @@ describe("make_dispatcher", function()
             frame._reset_for_testing()
             local ok, err = pcall(sfa.make_dispatcher, "bad")
             expect(ok).to.equal(false)
-            expect(err).to.contain("opts table required")
+            expect(contains(err, "opts table required")).to.equal(true)
         end)
 
         it("errors when builder is missing", function()
@@ -53,7 +68,7 @@ describe("make_dispatcher", function()
                 state = frame.state_new(),
             })
             expect(ok).to.equal(false)
-            expect(err).to.contain("opts.builder must be a function")
+            expect(contains(err, "opts.builder must be a function")).to.equal(true)
         end)
 
         it("errors when state is missing", function()
@@ -64,7 +79,7 @@ describe("make_dispatcher", function()
                 end,
             })
             expect(ok).to.equal(false)
-            expect(err).to.contain("opts.state")
+            expect(contains(err, "opts.state")).to.equal(true)
         end)
     end)
 
@@ -86,6 +101,7 @@ describe("make_dispatcher", function()
                 end,
                 state = frame.state_new(),
                 alc = mock_alc,
+                flow = stub_flow,
             })
 
             local resp = d("/pkg/step_1/agent")
@@ -106,6 +122,7 @@ describe("make_dispatcher", function()
                 end,
                 state = frame.state_new(),
                 alc = mock_alc,
+                flow = stub_flow,
             })
 
             local resp = d("step_bare")
@@ -165,8 +182,8 @@ describe("make_dispatcher", function()
             })
 
             local resp = d("/pkg/step_1/agent")
-            expect(resp).to.contain("BLOCKED")
-            expect(resp).to.contain("format-non-json")
+            expect(contains(resp, "BLOCKED")).to.equal(true)
+            expect(contains(resp, "format-non-json")).to.equal(true)
         end)
 
         it("returns BLOCKED when JSON is missing required fields", function()
@@ -188,7 +205,7 @@ describe("make_dispatcher", function()
             })
 
             local resp = d("/pkg/step_1/agent")
-            expect(resp).to.contain("BLOCKED")
+            expect(contains(resp, "BLOCKED")).to.equal(true)
         end)
 
         it("returns BLOCKED when flow_slot mismatches step", function()
@@ -210,8 +227,8 @@ describe("make_dispatcher", function()
             })
 
             local resp = d("/pkg/step_1/agent")
-            expect(resp).to.contain("BLOCKED")
-            expect(resp).to.contain("format-flow-slot-mismatch")
+            expect(contains(resp, "BLOCKED")).to.equal(true)
+            expect(contains(resp, "format-flow-slot-mismatch")).to.equal(true)
         end)
     end)
 
@@ -231,6 +248,7 @@ describe("make_dispatcher", function()
                 end,
                 state = frame.state_new(),
                 alc = minimal_mock_alc(called),
+                flow = stub_flow,
                 extras = { my_key = "my_val", count = 42 },
             })
 
@@ -245,10 +263,11 @@ describe("make_dispatcher", function()
                     return "P"
                 end,
                 state = frame.state_new(),
+                flow = stub_flow,
                 extras = "bad",
             })
             expect(ok).to.equal(false)
-            expect(err).to.contain("opts.extras must be a table or nil")
+            expect(contains(err, "opts.extras must be a table or nil")).to.equal(true)
         end)
     end)
 
@@ -276,6 +295,7 @@ describe("make_dispatcher", function()
                 end,
                 state = frame.state_new(),
                 alc = minimal_mock_alc(called),
+                flow = stub_flow,
                 plugins = { recorder },
             })
 
