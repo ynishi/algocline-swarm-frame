@@ -10,21 +10,17 @@
 --- Schema-as-Data and the persistable-by-construction invariant are
 --- inherited from lshape. See design/design-doc.md for details.
 ---
---- Status: v0.1.1 (PoC). API surface is under verification through the
---- bundled_base_curator_orch rewrite.
-
--- Host-injected `alc.json_decode` / `alc.json_encode` are the preferred
--- JSON path in the algocline-engine Lua VM (which does NOT bundle cjson
--- or dkjson). cjson / dkjson are kept as a fallback for standalone Lua
--- test runs (`lua tests/run.lua` under the system interpreter).
-local cjson_ok, cjson = pcall(require, "cjson")
-if not cjson_ok then
-    cjson_ok, cjson = pcall(require, "dkjson")
-end
+--- Status: v0.3.0 (M.host seam, spec/ 規約導入). API surface is under
+--- verification through the bundled_base_curator_orch rewrite.
 
 local M = {}
 
-M.VERSION = "0.1.1"
+M.VERSION = "0.3.0"
+
+-- DI seam: inject a custom JSON host to override the auto-detect chain.
+-- Set to a table { encode = fn, decode = fn } before any JSON helper is
+-- called. Leave nil to use the auto-detect chain (see host() below).
+M.host = nil
 
 -- ─── check_mode (init-time freeze, strict by default) ───────────────────────
 --
@@ -100,9 +96,14 @@ function M._reset_for_testing()
     _check_mode  = "strict"
 end
 
+--- Test-only: reset M.host to nil so the auto-detect chain is used.
+function M._reset_host_for_testing()
+    M.host = nil
+end
+
 M.meta = {
     name        = "swarm_frame",
-    version     = "0.1.1",
+    version     = "0.3.0",
     category    = "frame",
     description = "Thin runtime for ProgramableSwarm — state container, "
         .. "session-key path registry, verdict parser, linear pipeline runner, "
@@ -110,27 +111,41 @@ M.meta = {
 }
 
 -- ─── JSON helpers (preserves the lshape Persistable invariant) ───────────────
+--
+-- host() resolves a JSON provider through a 5-step chain, in order:
+--   1. M.host explicit injection (test or app override)
+--   2. _G.alc.json_encode / _G.alc.json_decode (algocline engine VM)
+--   3. dkjson (pure Lua, portable)
+--   4. cjson (C extension fallback)
+--   5. vendored pure_json (swarm_frame.pure_json, always present)
+-- The chain must never be short-circuited to a single hard-wired provider.
 
-local function json_encode(t)
-    if type(_G.alc) == "table" and type(_G.alc.json_encode) == "function" then
-        return _G.alc.json_encode(t)
+local function host()
+    if M.host then
+        if type(M.host) ~= "table"
+            or type(M.host.encode) ~= "function"
+            or type(M.host.decode) ~= "function" then
+            error("swarm_frame: M.host must have encode and decode functions")
+        end
+        return M.host
     end
-    if cjson_ok then return cjson.encode(t) end
-    error("swarm_frame: no JSON encoder available (need alc.json_encode, "
-        .. "lua-cjson, or dkjson)")
+    if type(_G.alc) == "table"
+        and type(_G.alc.json_encode) == "function"
+        and type(_G.alc.json_decode) == "function" then
+        return { encode = _G.alc.json_encode, decode = _G.alc.json_decode }
+    end
+    local ok, dkjson = pcall(require, "dkjson")
+    if ok then return { encode = dkjson.encode, decode = dkjson.decode } end
+    local ok2, cjson = pcall(require, "cjson")
+    if ok2 then return { encode = cjson.encode, decode = cjson.decode } end
+    return require("swarm_frame.pure_json")
 end
 
-local function json_decode(s)
-    if type(_G.alc) == "table" and type(_G.alc.json_decode) == "function" then
-        return _G.alc.json_decode(s)
-    end
-    if cjson_ok then return cjson.decode(s) end
-    error("swarm_frame: no JSON decoder available (need alc.json_decode, "
-        .. "lua-cjson, or dkjson)")
-end
+local function json_encode(t) return host().encode(t) end
+local function json_decode(s) return host().decode(s) end
 
 -- Expose JSON helpers so adapter packages (swarm_frame_algocline) can
--- reuse the same encoder/decoder without re-detecting cjson/dkjson.
+-- reuse the same encoder/decoder without re-detecting the provider.
 M.json_decode = json_decode
 M.json_encode = json_encode
 
