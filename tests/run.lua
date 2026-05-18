@@ -1503,7 +1503,7 @@ describe("normalize: entry-boundary type coercion", function()
         expect(type(frame.normalize.coerce_number)).to.equal("function")
         expect(type(frame.normalize.coerce_table)).to.equal("function")
         expect(type(frame.normalize.normalize_ctx)).to.equal("function")
-        expect(frame.normalize.VERSION).to.equal("0.3.0")
+        expect(frame.normalize.VERSION).to.equal("0.4.0")
     end)
 
     -- single-field coercers
@@ -2258,6 +2258,200 @@ describe("normalize_ctx smoke: coding_orch canonical shape", function()
         expect(ctx.resume).to.equal(true)
         expect(ctx.use_gemma).to.equal(false)
         expect(ctx.qwen_env.K).to.equal("v")
+    end)
+end)
+
+-- ─── parse_label_verdict L-shape (v0.4) ─────────────────────────────────────
+-- Issue 1779065252-8162 — promote BLOCKED L-shape to a Frame primitive.
+-- Mirrors packages/swarm_frame/spec/parse_label_verdict_spec.lua so the
+-- canonical CI surface (tests/run.lua) verifies them too.
+
+describe("parse_label_verdict — L-shape (v0.4)", function()
+    describe("legacy back-compat", function()
+        it("no opts -> bare label string", function()
+            local v = frame.parse_label_verdict("VERDICT: BLOCKED", { "BLOCKED", "PASS" })
+            expect(v).to.equal("BLOCKED")
+        end)
+        it("structured=false -> bare label string", function()
+            local v = frame.parse_label_verdict("VERDICT: PASS", { "BLOCKED", "PASS" }, { structured = false })
+            expect(v).to.equal("PASS")
+        end)
+        it(
+            "no match + no structured -> nil",
+            function() expect(frame.parse_label_verdict("nothing", { "BLOCKED", "PASS" })).to.equal(nil) end
+        )
+    end)
+
+    describe("structured=true table shape", function()
+        it("returns {verdict, next_action, reason} table", function()
+            local v = frame.parse_label_verdict(
+                "VERDICT: BLOCKED\nnext_action: retry\nreason: transient_io",
+                { "BLOCKED", "PASS" },
+                { structured = true }
+            )
+            expect(type(v)).to.equal("table")
+            expect(v.verdict).to.equal("BLOCKED")
+            expect(v.next_action).to.equal("retry")
+            expect(v.reason).to.equal("transient_io")
+        end)
+        it("no match + structured -> all-nil table", function()
+            local v = frame.parse_label_verdict("nothing", { "BLOCKED", "PASS" }, { structured = true })
+            expect(type(v)).to.equal("table")
+            expect(v.verdict).to.equal(nil)
+            expect(v.next_action).to.equal(nil)
+            expect(v.reason).to.equal(nil)
+        end)
+    end)
+
+    describe("standard next_action values", function()
+        it("retry", function()
+            local v = frame.parse_label_verdict(
+                "VERDICT: BLOCKED\nnext_action: retry",
+                { "BLOCKED" },
+                { structured = true }
+            )
+            expect(v.next_action).to.equal("retry")
+        end)
+        it("escalate", function()
+            local v = frame.parse_label_verdict(
+                "VERDICT: NEEDS_HUMAN\nnext_action: escalate",
+                { "NEEDS_HUMAN" },
+                { structured = true }
+            )
+            expect(v.next_action).to.equal("escalate")
+        end)
+        it("halt", function()
+            local v = frame.parse_label_verdict(
+                "VERDICT: BLOCKED\nnext_action: halt",
+                { "BLOCKED" },
+                { structured = true }
+            )
+            expect(v.next_action).to.equal("halt")
+        end)
+    end)
+
+    describe("custom next_action pass-through", function()
+        it("non-standard token wait_dependency", function()
+            local v = frame.parse_label_verdict(
+                "VERDICT: BLOCKED\nnext_action: wait_dependency",
+                { "BLOCKED" },
+                { structured = true }
+            )
+            expect(v.next_action).to.equal("wait_dependency")
+        end)
+        it("preserves casing of custom string", function()
+            local v = frame.parse_label_verdict(
+                "VERDICT: BLOCKED\nnext_action: WaitForPRMerge",
+                { "BLOCKED" },
+                { structured = true }
+            )
+            expect(v.next_action).to.equal("WaitForPRMerge")
+        end)
+    end)
+
+    describe("label-specific defaults when next_action absent", function()
+        it("BLOCKED -> halt", function()
+            local v = frame.parse_label_verdict("VERDICT: BLOCKED", { "BLOCKED" }, { structured = true })
+            expect(v.next_action).to.equal("halt")
+        end)
+        it("NEEDS_HUMAN -> escalate", function()
+            local v = frame.parse_label_verdict("VERDICT: NEEDS_HUMAN", { "NEEDS_HUMAN" }, { structured = true })
+            expect(v.next_action).to.equal("escalate")
+        end)
+        it("PASS -> nil", function()
+            local v = frame.parse_label_verdict("VERDICT: PASS", { "PASS" }, { structured = true })
+            expect(v.next_action).to.equal(nil)
+        end)
+    end)
+
+    describe("reason extraction", function()
+        it("line-form reason", function()
+            local v = frame.parse_label_verdict(
+                "VERDICT: BLOCKED\nreason: missing upstream PR",
+                { "BLOCKED" },
+                { structured = true }
+            )
+            expect(v.reason).to.equal("missing upstream PR")
+        end)
+        it("JSON-form reason + next_action", function()
+            local v = frame.parse_label_verdict(
+                'VERDICT: BLOCKED { "reason": "missing api key", "next_action": "halt" }',
+                { "BLOCKED" },
+                { structured = true }
+            )
+            expect(v.reason).to.equal("missing api key")
+            expect(v.next_action).to.equal("halt")
+        end)
+        it("absent reason -> nil", function()
+            local v = frame.parse_label_verdict("VERDICT: BLOCKED", { "BLOCKED" }, { structured = true })
+            expect(v.reason).to.equal(nil)
+        end)
+    end)
+end)
+
+describe("parse_verdict — next_action JSON pickup (v0.4)", function()
+    it("picks up next_action from JSON envelope", function()
+        local v = frame.parse_verdict('{"status":"BLOCKED","reason":"x","next_action":"retry"}')
+        expect(v.status).to.equal("BLOCKED")
+        expect(v.next_action).to.equal("retry")
+    end)
+    it("leaves next_action nil when JSON omits the field", function()
+        local v = frame.parse_verdict('{"status":"DONE","path":"/pkg/step_1"}')
+        expect(v.next_action).to.equal(nil)
+    end)
+    it("legacy text BLOCKED has no next_action (caller default applies)", function()
+        local v = frame.parse_verdict("BLOCKED reason=needs_review")
+        expect(v.status).to.equal("BLOCKED")
+        expect(v.next_action).to.equal(nil)
+    end)
+end)
+
+describe("run_linear — next_action flow to ctx.result (v0.4)", function()
+    local function reset()
+        frame._reset_for_testing()
+        frame._reset_host_for_testing()
+        local reg = frame._registry()
+        for k in pairs(reg) do
+            frame.unregister(k)
+        end
+    end
+    lust.before(function() reset() end)
+    lust.after(function() reset() end)
+
+    it("flows next_action from JSON verdict to ctx.result", function()
+        frame.register("/pkg/lshape_x/agent", {})
+        local s = frame.state_new()
+        local ctx = {
+            state = s,
+            dispatcher = function() return '{"status":"BLOCKED","reason":"upstream","next_action":"retry"}' end,
+        }
+        frame.run_linear({ "/pkg/lshape_x/agent" }, ctx)
+        expect(ctx.result.status).to.equal("BLOCKED")
+        expect(ctx.result.next_action).to.equal("retry")
+    end)
+
+    it("applies BLOCKED -> halt default for legacy text verdict", function()
+        frame.register("/pkg/lshape_y/agent", {})
+        local s = frame.state_new()
+        local ctx = {
+            state = s,
+            dispatcher = function() return "BLOCKED reason=external_dep" end,
+        }
+        frame.run_linear({ "/pkg/lshape_y/agent" }, ctx)
+        expect(ctx.result.status).to.equal("BLOCKED")
+        expect(ctx.result.next_action).to.equal("halt")
+    end)
+
+    it("applies NEEDS_INPUT -> escalate default", function()
+        frame.register("/pkg/lshape_z/agent", {})
+        local s = frame.state_new()
+        local ctx = {
+            state = s,
+            dispatcher = function() return "NEEDS_INPUT missing=api_key" end,
+        }
+        frame.run_linear({ "/pkg/lshape_z/agent" }, ctx)
+        expect(ctx.result.status).to.equal("NEEDS_INPUT")
+        expect(ctx.result.next_action).to.equal("escalate")
     end)
 end)
 

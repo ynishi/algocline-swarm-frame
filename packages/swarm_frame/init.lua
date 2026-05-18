@@ -15,7 +15,7 @@
 
 local M = {}
 
-M.VERSION = "0.3.0"
+M.VERSION = "0.4.0"
 
 -- DI seam: inject a custom JSON host to override the auto-detect chain.
 -- Set to a table { encode = fn, decode = fn } before any JSON helper is
@@ -101,7 +101,7 @@ function M._reset_host_for_testing() M.host = nil end
 
 M.meta = {
     name = "swarm_frame",
-    version = "0.3.0",
+    version = "0.4.0",
     category = "frame",
     description = "Thin runtime for ProgramableSwarm — state container, "
         .. "session-key path registry, verdict parser, linear pipeline runner, "
@@ -372,6 +372,7 @@ function M.parse_verdict(response, opts)
                 path = obj.path,
                 reason = obj.reason,
                 missing = obj.missing,
+                next_action = type(obj.next_action) == "string" and obj.next_action or nil,
                 flow_token = obj.flow_token,
                 flow_slot = obj.flow_slot,
                 raw = r,
@@ -463,10 +464,68 @@ end
 --     {bare_substring = true, require_absent = {FAIL = "PASS"}})
 --   -- catches "test FAILED" + suppresses if "PASSED" appears elsewhere
 --
--- Future extension points (v0.4 candidates, see design doc §10.4):
+-- v0.4 enrolls 1 additional axis — BLOCKED L-shape rich payload:
+--
+--   opts.structured (boolean, default false)
+--     When true, instead of returning the matched label as a bare string,
+--     the function returns a 3-field table:
+--       { verdict = <label> | nil,
+--         next_action = <string> | nil,
+--         reason = <string> | nil }
+--     `next_action` and `reason` are extracted leniently from the response
+--     (line-form `next_action: X` / `reason: X` or JSON `"next_action":"X"`
+--     style, case-insensitive). When `next_action` is absent from the
+--     response, a label-specific safety default is applied:
+--       BLOCKED     → "halt"     (do not auto-retry)
+--       NEEDS_HUMAN → "escalate" (kick to Human)
+--       PASS        → nil        (no next step forced)
+--     For custom labels the missing-field default is nil.
+--     When no label matched, the table form is still returned with all
+--     three fields = nil, so the caller can do
+--     `local v = parse_label_verdict(..., {structured=true}); if v.verdict then ...`.
+--
+-- Future extension points (v0.5 candidates, see design doc §10.4):
 --   opts.case_sensitive, opts.line_anchor, parse_label_with_confidence
 
 local function _escape_lua_pattern(s) return s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1") end
+
+-- ─── structured payload helpers (BLOCKED L-shape extension) ────────────────
+--
+-- Used by parse_label_verdict when opts.structured = true. The extraction
+-- is lenient (case-insensitive, accepts ":" / "=" / whitespace as the
+-- key-value separator) and returns the FIRST hit. Missing values come
+-- back as nil and the caller applies label-specific defaults.
+
+local function _extract_field(response, field)
+    if type(response) ~= "string" then return nil end
+    -- Try JSON-style first: "field":"value"
+    local v = response:match('"' .. field .. '"%s*:%s*"([^"]*)"')
+    if v and v ~= "" then return v end
+    -- Then line-form: field: value / field = value
+    -- Value extends to end-of-line (trimmed). Allows custom strings.
+    local lower = response:lower()
+    local lf = field:lower()
+    local s, e = lower:find(lf .. "%s*[:=]%s*", 1)
+    if s then
+        local tail = response:sub(e + 1)
+        local line = tail:match("([^\r\n]*)")
+        if line then
+            line = line:match("^%s*(.-)%s*$") -- trim
+            if line ~= "" then return line end
+        end
+    end
+    return nil
+end
+
+-- Default next_action when the field is absent from the response.
+-- Safe-side: BLOCKED / NEEDS_HUMAN stop the pipeline even without an
+-- explicit next_action (halt / escalate). PASS does not force a next
+-- step (nil). Custom labels default to nil (caller-defined).
+local _DEFAULT_NEXT_ACTION = {
+    BLOCKED = "halt",
+    NEEDS_HUMAN = "escalate",
+    PASS = nil,
+}
 
 function M.parse_label_verdict(response, labels, opts)
     if response == nil then return nil end
@@ -475,8 +534,22 @@ function M.parse_label_verdict(response, labels, opts)
     local forms = opts.forms or { "VERDICT:" }
     local bare_token = opts.bare_token == true
     local bare_substring = opts.bare_substring == true
+    local structured = opts.structured == true
     local require_absent = opts.require_absent or {}
     local r = tostring(response):lower()
+    local raw_response = tostring(response)
+
+    -- Build the L-shape structured return when opts.structured = true.
+    -- For nil (no label matched) we still return a table so callers can
+    -- dispatch on .verdict == nil without a separate type check.
+    local function _build_result(label)
+        if not structured then return label end
+        if not label then return { verdict = nil, next_action = nil, reason = nil } end
+        local na = _extract_field(raw_response, "next_action")
+        if not na or na == "" then na = _DEFAULT_NEXT_ACTION[label] end
+        local reason = _extract_field(raw_response, "reason")
+        return { verdict = label, next_action = na, reason = reason }
+    end
 
     -- Per-label interleaved matching: for each label in priority order,
     -- try ALL prefix-form matches first, then (if a bare axis is on)
@@ -491,7 +564,7 @@ function M.parse_label_verdict(response, labels, opts)
         -- Axis 1: prefix-form match (unconditional, no require_absent)
         for _, form in ipairs(forms) do
             local esc_form = _escape_lua_pattern(form):lower()
-            if r:find(esc_form .. "%s*" .. esc_label) then return label end
+            if r:find(esc_form .. "%s*" .. esc_label) then return _build_result(label) end
         end
         -- Axis 2: bare label match.
         --   bare_substring=true  → plain substring (find(..., 1, true))
@@ -524,16 +597,16 @@ function M.parse_label_verdict(response, labels, opts)
                         -- negator present, label disqualified — continue
                         -- to next label
                     else
-                        return label
+                        return _build_result(label)
                     end
                 else
-                    return label
+                    return _build_result(label)
                 end
             end
         end
     end
 
-    return nil
+    return _build_result(nil)
 end
 
 -- ─── parse_and_assert (delegate-done assert primitive) ────────────────────
@@ -625,10 +698,21 @@ function M.run_linear(paths, ctx)
             if v.status ~= "DONE" then
                 state:log_phase(step_id, v.status, v.reason or v.missing or v.raw)
                 state:commit()
+                local na = v.next_action
+                if not na then
+                    -- Default mapping when the LLM didn't emit next_action.
+                    -- Safe-side: BLOCKED -> halt, NEEDS_INPUT -> escalate.
+                    if v.status == "BLOCKED" then
+                        na = "halt"
+                    elseif v.status == "NEEDS_INPUT" then
+                        na = "escalate"
+                    end
+                end
                 ctx.result = {
                     status = v.status,
                     reason = v.reason,
                     missing = v.missing,
+                    next_action = na,
                     raw_verdict = v.raw,
                     failed_path = path,
                 }

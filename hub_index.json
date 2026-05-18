@@ -1,6 +1,6 @@
 {
   "schema_version": "hub_index/v0",
-  "updated_at": "2026-05-17T03:20:56Z",
+  "updated_at": "2026-05-18T01:09:15Z",
   "packages": [
     {
       "name": "swarm_aggregate_plugin",
@@ -16,7 +16,7 @@
     },
     {
       "name": "swarm_frame",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "description": "Thin runtime for ProgramableSwarm — state container, session-key path registry, verdict parser, linear pipeline runner, and lshape 3-mode validation wrapper.",
       "category": "frame",
       "docstring": "swarm_frame — Thin runtime for ProgramableSwarm.\n\nProvides the back-stage that user code never has to think about:\nstate container, session-key path registry, verdict parsing, linear\npipeline runner, and an lshape 3-mode validation wrapper. User code\nonly registers a spec (and optionally a handler) per session-key\npath; state operations, step bookkeeping, logging, and verdict\nhandling are confined to the frame.\n\nSchema-as-Data and the persistable-by-construction invariant are\ninherited from lshape. See design/design-doc.md for details.\n\nStatus: v0.3.0 (M.host seam, spec/ 規約導入). API surface is under\nverification through the bundled_base_curator_orch rewrite.",
