@@ -15,7 +15,7 @@
 
 local M = {}
 
-M.VERSION = "0.4.0"
+M.VERSION = "0.5.0"
 
 -- DI seam: inject a custom JSON host to override the auto-detect chain.
 -- Set to a table { encode = fn, decode = fn } before any JSON helper is
@@ -101,7 +101,7 @@ function M._reset_host_for_testing() M.host = nil end
 
 M.meta = {
     name = "swarm_frame",
-    version = "0.4.0",
+    version = "0.5.0",
     category = "frame",
     description = "Thin runtime for ProgramableSwarm — state container, "
         .. "session-key path registry, verdict parser, linear pipeline runner, "
@@ -200,6 +200,19 @@ function State:set(key, value) set_path(self._data, key, value) end
 function State:step_done(step_id) return self._step_done[step_id] == true end
 
 function State:step_mark(step_id) self._step_done[step_id] = true end
+
+--- Apply a gate verdict using the plain_state.gate_decide primitive.
+--- Lazily initialises self._data.gates and self._data.completed_steps
+--- (both are separate namespaces from self._step_done).
+---
+--- @param name string       gate identifier
+--- @param verdict table     Rich Verdict (from M.plain_state.verdict or literal)
+--- @param save_fn fun()?    optional persistence callback
+function State:gate_decide(name, verdict, save_fn)
+    self._data.gates = self._data.gates or {}
+    self._data.completed_steps = self._data.completed_steps or {}
+    M.plain_state.gate_decide(self._data.gates, self._data.completed_steps, name, verdict, save_fn)
+end
 
 function State:log_phase(step, kind, detail)
     self._log[#self._log + 1] = {
