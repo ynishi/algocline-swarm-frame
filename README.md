@@ -125,12 +125,34 @@ and `alc_pkg_link` the `packages/` directory as shown in "Setup".
 
 ## Status
 
-v0.2.0. Frame core (`swarm_frame` v0.1.1), Token & Prompt round-trip
+v0.5.0. Frame core (`swarm_frame` v0.5.0) with Rich Verdict 2-layer
+separation and `gate_decide` primitive. Token & Prompt round-trip
 primitive (`swarm_frame_algocline` v0.1.1), and Swarm aggregate plugin
 (`swarm_aggregate_plugin` v0.1.0) bridging multi-agent debate (dmad
-/ Du 2023) onto the dispatcher. 193 lua tests + mock smoke + real-LLM
+/ Du 2023) onto the dispatcher. Lua tests + mock smoke + real-LLM
 e2e (agent-block) all passing. Hub `hub_index.json` (3 entries) for
 `alc init` / `alc_hub_search` consumption.
+
+### Rich Verdict 2-layer separation (v0.5.0)
+
+`gate_decide` enforces a hard split between two responsibilities:
+
+- **Internal transition layer**: `verdict:is_halting()` is the sole
+  function that decides state-machine transition. No string-matching
+  on `next_action`, `label`, or any other field inside the primitive.
+- **Host information layer**: the full verdict object is stored
+  verbatim in `state.data.gates[name].verdict` — `next_action`,
+  `detail`, `raw`, `label` are passed through untouched for consumers.
+
+New surface:
+- `swarm_frame.plain_state.verdict(fields)` — Verdict factory; injects
+  `is_halting()` via metatable. Custom override: pass
+  `fields.is_halting = function(self) ... end`.
+- `swarm_frame.plain_state.gate_decide(gates, completed_steps, name,
+  verdict, save_fn?)` — Rich Verdict primitive (free-function form).
+- `swarm_frame.State:gate_decide(name, verdict, save_fn?)` — method
+  form; delegates to `plain_state.gate_decide` after lazy-initialising
+  `_data.gates` / `_data.completed_steps`.
 
 ## License
 
