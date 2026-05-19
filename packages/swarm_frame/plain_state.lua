@@ -62,7 +62,7 @@
 
 local M = {}
 
-M.VERSION = "0.4.0"
+M.VERSION = "0.5.0"
 
 --- Return true iff `name` appears anywhere in `completed_steps`.
 --- Linear scan; O(n) on the list length. The list is left untouched.
@@ -107,6 +107,94 @@ function M.log_phase(pipeline_log, name, status, detail)
         status = status,
         detail = detail,
     }
+end
+
+-- ─── Rich Verdict 2-layer separation ────────────────────────────────────────
+--
+-- Two layers are kept strictly isolated:
+--
+--   [Internal transition layer (hard)]
+--     verdict:is_halting() -> bool
+--       The sole function that drives state-machine transitions.
+--       gate_decide reads ONLY this — string matching on next_action or
+--       label inside the primitive is forbidden.
+--     default: returns true iff next_action == "halt"
+--
+--   [Host information layer (Rich)]
+--     verdict.next_action   string  -- "halt"/"escalate"/"retry"/Custom
+--     verdict.detail        string?
+--     verdict.raw           any
+--     verdict.label         string
+--     -> stored verbatim in state.data.gates[name].verdict
+--     -> gate_decide performs pass-through only; it never interprets,
+--        transforms, or removes any field.
+
+local Verdict = {}
+Verdict.__index = Verdict
+
+--- Default is_halting implementation.
+--- Returns true iff next_action == "halt".  This is the internal
+--- transition layer's sole decision gate; callers that need custom
+--- halt semantics pass `is_halting = function(self) ... end` in
+--- `fields` to override via metatable __index precedence.
+function Verdict:is_halting() return self.next_action == "halt" end
+
+--- Build a Rich Verdict object.
+--- `fields` must be a table; recommended keys:
+---   label       string   -- e.g. "BLOCKED" / "PASS"
+---   next_action string?  -- "halt" / "escalate" / "retry" / Custom
+---   detail      string?
+---   raw         any
+---   is_halting  fun(self)?  -- Custom override (wins over default)
+---
+--- @param fields table
+--- @return table  verdict with :is_halting() method
+function M.verdict(fields)
+    if type(fields) ~= "table" then error("swarm_frame.plain_state.verdict: fields must be a table") end
+    return setmetatable(fields, Verdict)
+end
+
+--- Apply a gate verdict to the shared gate registry and completed-steps list.
+---
+--- Two strict invariants (Crux):
+---   1. The ONLY condition that appends `name` to `completed_steps` is
+---      `verdict:is_halting()` returning true.  No string match on
+---      next_action, label, or any other field is allowed here.
+---   2. The entire `verdict` object is stored verbatim at
+---      `gates[name].verdict`.  No field is read, transformed, or
+---      removed by this primitive.
+---
+--- `retries` is incremented on every call (including PASS verdicts) —
+--- it counts gate_decide invocations, not halt events.
+---
+--- @param gates table               gate-name → gate-record dict
+--- @param completed_steps table     string list (mutated on halt)
+--- @param name string               gate identifier
+--- @param verdict table             Rich Verdict (from M.verdict or literal)
+--- @param save_fn fun()?            optional persistence callback
+function M.gate_decide(gates, completed_steps, name, verdict, save_fn)
+    if type(gates) ~= "table" then error("swarm_frame.plain_state.gate_decide: gates must be a table") end
+    if type(completed_steps) ~= "table" then
+        error("swarm_frame.plain_state.gate_decide: completed_steps must be a table")
+    end
+    if type(name) ~= "string" then error("swarm_frame.plain_state.gate_decide: name must be a string") end
+    if type(verdict) ~= "table" then error("swarm_frame.plain_state.gate_decide: verdict must be a table") end
+
+    -- Fallback for literal-table verdicts not created via M.verdict():
+    -- attach the default Verdict metatable so :is_halting() is available.
+    -- Only applied when the table has no metatable at all (no-op for
+    -- factory-created verdicts that already carry Verdict as their mt).
+    if type(verdict.is_halting) ~= "function" and getmetatable(verdict) == nil then setmetatable(verdict, Verdict) end
+
+    local g = gates[name] or { retries = 0 }
+    g.verdict = verdict -- Rich pass-through: all fields preserved verbatim
+    g.retries = (g.retries or 0) + 1 -- counts calls, not halt events
+    if verdict:is_halting() then -- sole transition gate (Crux)
+        completed_steps[#completed_steps + 1] = name
+        g.marked_at = os.time()
+    end
+    gates[name] = g
+    if save_fn then save_fn() end
 end
 
 return M
