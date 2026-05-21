@@ -162,3 +162,48 @@ describe("Custom next_action does NOT cause halt by string match", function()
         expect(#steps_pass).to.equal(0) -- non-halt -> not appended
     end)
 end)
+
+-- ─── Verdict applicable_under ─────────────────────────────────────────────────
+
+describe("Verdict applicable_under", function()
+    it("returns factory-time applicable_under list when set", function()
+        local v = ps.verdict({ label = "PASS", next_action = nil, applicable_under = { "topic-only" } })
+        local result = v:applicable_under()
+        expect(type(result)).to.equal("table")
+        expect(result[1]).to.equal("topic-only")
+    end)
+
+    it("returns '*' when applicable_under is not set in factory (default)", function()
+        local v = ps.verdict({ label = "PASS", next_action = nil })
+        expect(v:applicable_under()).to.equal("*")
+    end)
+
+    it("allows producer to override applicable_under via fields function", function()
+        local v = ps.verdict({
+            label = "PASS",
+            next_action = nil,
+            applicable_under = function(self) return { "foo", "bar" } end,
+        })
+        -- Custom override wins: fields.applicable_under is a function,
+        -- so self.applicable_under returns that function (not the list).
+        -- The method self:applicable_under() calls self.applicable_under(self).
+        local result = v:applicable_under()
+        expect(type(result)).to.equal("table")
+        expect(result[1]).to.equal("foo")
+        expect(result[2]).to.equal("bar")
+    end)
+
+    it("returns factory-time value unchanged after construction (Crux 3: factory-only immutability)", function()
+        local original = { "strategy-a" }
+        local v = ps.verdict({ label = "PASS", next_action = nil, applicable_under = original })
+        -- Method returns the factory-time field value
+        expect(v:applicable_under()).to.equal(original)
+        -- There is no public setter on the frame; the method reflects factory state
+        expect(v:applicable_under()[1]).to.equal("strategy-a")
+    end)
+
+    it("returns '*' for applicable_under = '*' string", function()
+        local v = ps.verdict({ label = "PASS", next_action = nil, applicable_under = "*" })
+        expect(v:applicable_under()).to.equal("*")
+    end)
+end)

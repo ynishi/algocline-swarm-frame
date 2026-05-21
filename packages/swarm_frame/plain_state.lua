@@ -139,16 +139,32 @@ Verdict.__index = Verdict
 --- `fields` to override via metatable __index precedence.
 function Verdict:is_halting() return self.next_action == "halt" end
 
+--- Default applicable_under implementation.
+--- Returns the raw `applicable_under` field (factory-set) or "*" if absent.
+--- "*" means the verdict applies under all strategies (universal).
+--- Callers that need strategy-scoped routing pass
+--- `applicable_under = {"strategy-name", ...}` in `fields`, or pass
+--- `applicable_under = function(self) ... end` to override via
+--- metatable __index precedence (same pattern as is_halting).
+--- Uses rawget to avoid recursive __index resolution when no field is set.
+function Verdict:applicable_under()
+    local v = rawget(self, "applicable_under")
+    if type(v) == "function" then return v(self) end
+    return v or "*"
+end
+
 --- Build a Rich Verdict object.
 --- `fields` must be a table; recommended keys:
----   label       string   -- e.g. "BLOCKED" / "PASS"
----   next_action string?  -- "halt" / "escalate" / "retry" / Custom
----   detail      string?
----   raw         any
----   is_halting  fun(self)?  -- Custom override (wins over default)
+---   label             string   -- e.g. "BLOCKED" / "PASS"
+---   next_action       string?  -- "halt" / "escalate" / "retry" / Custom
+---   detail            string?
+---   raw               any
+---   is_halting        fun(self)?        -- Custom override (wins over default)
+---   applicable_under  string|table?    -- "*" or list of strategy names;
+---                                      -- omit for universal applicability
 ---
 --- @param fields table
---- @return table  verdict with :is_halting() method
+--- @return table  verdict with :is_halting() and :applicable_under() methods
 function M.verdict(fields)
     if type(fields) ~= "table" then error("swarm_frame.plain_state.verdict: fields must be a table") end
     return setmetatable(fields, Verdict)
@@ -164,21 +180,33 @@ end
 ---      `gates[name].verdict`.  No field is read, transformed, or
 ---      removed by this primitive.
 ---
---- `retries` is incremented on every call (including PASS verdicts) —
---- it counts gate_decide invocations, not halt events.
+--- `retries` is incremented on every call (including PASS verdicts and
+--- skipped calls) — it counts gate_decide invocations, not halt events.
+---
+--- When `ctx` is provided and `ctx.strategy` is set, the verdict's
+--- `applicable_under` is consulted.  If the strategy is not in the
+--- applicable list the gate is skipped: `gates[name].skipped = true`,
+--- `gates[name].skip_reason` is set, `retries` is incremented, but no
+--- transition occurs (`marked_at` remains unset, `completed_steps` is
+--- not appended).  `ctx = nil` or `ctx.strategy = nil` bypasses this
+--- check entirely, preserving v0.5.0 bit-identical behaviour.
 ---
 --- @param gates table               gate-name → gate-record dict
 --- @param completed_steps table     string list (mutated on halt)
 --- @param name string               gate identifier
 --- @param verdict table             Rich Verdict (from M.verdict or literal)
 --- @param save_fn fun()?            optional persistence callback
-function M.gate_decide(gates, completed_steps, name, verdict, save_fn)
+--- @param ctx table?                optional caller-local context (e.g. { strategy = "..." })
+function M.gate_decide(gates, completed_steps, name, verdict, save_fn, ctx)
     if type(gates) ~= "table" then error("swarm_frame.plain_state.gate_decide: gates must be a table") end
     if type(completed_steps) ~= "table" then
         error("swarm_frame.plain_state.gate_decide: completed_steps must be a table")
     end
     if type(name) ~= "string" then error("swarm_frame.plain_state.gate_decide: name must be a string") end
     if type(verdict) ~= "table" then error("swarm_frame.plain_state.gate_decide: verdict must be a table") end
+    if ctx ~= nil and type(ctx) ~= "table" then
+        error("swarm_frame.plain_state.gate_decide: ctx must be a table or nil")
+    end
 
     -- Fallback for literal-table verdicts not created via M.verdict():
     -- attach the default Verdict metatable so :is_halting() is available.
@@ -186,6 +214,49 @@ function M.gate_decide(gates, completed_steps, name, verdict, save_fn)
     -- factory-created verdicts that already carry Verdict as their mt).
     if type(verdict.is_halting) ~= "function" and getmetatable(verdict) == nil then setmetatable(verdict, Verdict) end
 
+    -- Resolve applicable_under.
+    -- Three cases by precedence:
+    --   (a) field is a function (producer override, same pattern as is_halting):
+    --       call it to get the resolved string|table value
+    --   (b) field is a string or table (raw factory value): use directly
+    --   (c) field is nil or any other type (absent / invalid, including literal
+    --       table verdicts with no applicable_under field): default "*" (Crux 2)
+    local raw_au = verdict.applicable_under
+    local applicable
+    if type(raw_au) == "function" then
+        applicable = raw_au(verdict) -- call with self; returns string|table
+    elseif type(raw_au) == "string" or type(raw_au) == "table" then
+        applicable = raw_au
+    else
+        applicable = "*" -- absent / invalid → universal (Crux 2)
+    end
+    -- Final safety: normalise any remaining non-string non-table to "*"
+    if type(applicable) ~= "string" and type(applicable) ~= "table" then applicable = "*" end
+
+    -- ctx applicability check: only when ctx and ctx.strategy are non-nil and
+    -- applicable is not the universal wildcard "*"
+    if ctx ~= nil and ctx.strategy ~= nil and applicable ~= "*" then
+        local found = false
+        for _, s in ipairs(applicable) do
+            if s == ctx.strategy then
+                found = true
+                break
+            end
+        end
+        if not found then
+            -- Skip path: record skip, increment retries, NO transition
+            local g = gates[name] or { retries = 0 }
+            g.verdict = verdict -- Rich pass-through: preserved verbatim even on skip
+            g.retries = (g.retries or 0) + 1
+            g.skipped = true
+            g.skip_reason = "ctx.strategy '" .. tostring(ctx.strategy) .. "' not in applicable_under"
+            gates[name] = g
+            if save_fn then save_fn() end
+            return
+        end
+    end
+
+    -- Normal path (bit-identical to v0.5.0 when ctx is nil or check passes)
     local g = gates[name] or { retries = 0 }
     g.verdict = verdict -- Rich pass-through: all fields preserved verbatim
     g.retries = (g.retries or 0) + 1 -- counts calls, not halt events

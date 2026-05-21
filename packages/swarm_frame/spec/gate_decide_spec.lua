@@ -173,6 +173,161 @@ describe("plain_state.gate_decide", function()
     end)
 end)
 
+-- ─── plain_state.gate_decide ctx-aware applicability ─────────────────────────
+
+describe("plain_state.gate_decide ctx-aware applicability", function()
+    -- Crux 1: 5-arg and 6-arg ctx=nil are bit-identical
+    it("5-arg and 6-arg ctx=nil produce bit-identical gates[name] shape (Crux 1)", function()
+        local gates5, steps5 = {}, {}
+        local gates6, steps6 = {}, {}
+        local v = ps.verdict({ label = "BLOCKED", next_action = "halt" })
+
+        ps.gate_decide(gates5, steps5, "g", v)
+        ps.gate_decide(gates6, steps6, "g", v, nil, nil)
+
+        expect(gates5.g.retries).to.equal(gates6.g.retries)
+        expect(#steps5).to.equal(#steps6)
+        expect(steps5[1]).to.equal(steps6[1])
+        expect(type(gates5.g.marked_at)).to.equal(type(gates6.g.marked_at))
+        expect(gates5.g.skipped).to.equal(gates6.g.skipped) -- both nil
+    end)
+
+    -- Crux 1: 5-arg with save_fn and 6-arg with save_fn + ctx=nil are bit-identical
+    it("5-arg save_fn and 6-arg save_fn+ctx=nil produce bit-identical shape (Crux 1)", function()
+        local gates5, steps5 = {}, {}
+        local gates6, steps6 = {}, {}
+        local v = ps.verdict({ label = "PASS", next_action = nil })
+        local save5_count, save6_count = 0, 0
+
+        ps.gate_decide(gates5, steps5, "g", v, function() save5_count = save5_count + 1 end)
+        ps.gate_decide(gates6, steps6, "g", v, function() save6_count = save6_count + 1 end, nil)
+
+        expect(gates5.g.retries).to.equal(gates6.g.retries)
+        expect(#steps5).to.equal(#steps6)
+        expect(save5_count).to.equal(1)
+        expect(save6_count).to.equal(1)
+        expect(gates5.g.skipped).to.equal(gates6.g.skipped) -- both nil
+    end)
+
+    -- Skip when ctx.strategy not in applicable_under list
+    it("skips gate when ctx.strategy is not in applicable_under list", function()
+        local gates, steps = {}, {}
+        local v = ps.verdict({ label = "PASS", next_action = nil, applicable_under = { "topic-only" } })
+        ps.gate_decide(gates, steps, "g", v, nil, { strategy = "main" })
+
+        expect(gates.g.skipped).to.equal(true)
+        expect(type(gates.g.skip_reason)).to.equal("string")
+        expect(gates.g.skip_reason:find("not in applicable_under") ~= nil).to.equal(true)
+        -- completed_steps not appended on skip
+        expect(#steps).to.equal(0)
+        -- marked_at not set on skip
+        expect(gates.g.marked_at).to.equal(nil)
+        -- retries is incremented even on skip
+        expect(gates.g.retries).to.equal(1)
+    end)
+
+    -- Verdict pass-through on skip path (Rich Verdict pass-through contract, skip path)
+    it("skip path stores verdict as pass-through (Rich Verdict contract on skip)", function()
+        local gates, steps = {}, {}
+        local v = ps.verdict({
+            label = "BLOCKED",
+            next_action = "halt",
+            applicable_under = { "topic-only" },
+            detail = "some detail",
+        })
+        ps.gate_decide(gates, steps, "g", v, nil, { strategy = "main" })
+
+        expect(gates.g.skipped).to.equal(true)
+        -- verdict is stored verbatim even on skip
+        expect(gates.g.verdict).to.equal(v)
+        expect(gates.g.verdict.label).to.equal("BLOCKED")
+        expect(gates.g.verdict.detail).to.equal("some detail")
+    end)
+
+    -- Apply when ctx.strategy is in applicable_under list
+    it("applies gate normally when ctx.strategy is in applicable_under list", function()
+        local gates, steps = {}, {}
+        local v = ps.verdict({ label = "BLOCKED", next_action = "halt", applicable_under = { "topic-only", "main" } })
+        ps.gate_decide(gates, steps, "g", v, nil, { strategy = "topic-only" })
+
+        expect(gates.g.skipped).to.equal(nil)
+        expect(#steps).to.equal(1) -- halt -> appended
+        expect(steps[1]).to.equal("g")
+    end)
+
+    -- applicable_under = "*" always applies regardless of ctx.strategy
+    it("applies when applicable_under = '*' regardless of ctx.strategy", function()
+        local gates, steps = {}, {}
+        local v = ps.verdict({ label = "PASS", next_action = nil, applicable_under = "*" })
+        ps.gate_decide(gates, steps, "g", v, nil, { strategy = "any-strategy" })
+
+        expect(gates.g.skipped).to.equal(nil)
+        expect(#steps).to.equal(0) -- PASS -> not appended, but also not skipped
+    end)
+
+    -- ctx = nil with applicable_under set: no applicability check (Crux 1 fallback)
+    it("does NOT skip when ctx is nil, even with applicable_under set", function()
+        local gates, steps = {}, {}
+        local v = ps.verdict({ label = "BLOCKED", next_action = "halt", applicable_under = { "topic-only" } })
+        ps.gate_decide(gates, steps, "g", v, nil, nil)
+
+        expect(gates.g.skipped).to.equal(nil)
+        expect(#steps).to.equal(1) -- normal halt path
+    end)
+
+    -- ctx = {} (ctx.strategy nil): applicability check skipped (bit-identical fallback)
+    it("does NOT skip when ctx.strategy is nil (ctx = {})", function()
+        local gates, steps = {}, {}
+        local v = ps.verdict({ label = "BLOCKED", next_action = "halt", applicable_under = { "topic-only" } })
+        ps.gate_decide(gates, steps, "g", v, nil, {})
+
+        expect(gates.g.skipped).to.equal(nil)
+        expect(#steps).to.equal(1) -- normal halt path
+    end)
+
+    -- Crux 2: literal verdict (no applicable_under method) defaults to "*" — never skip
+    it("literal table verdict with no applicable_under method is treated as '*' (Crux 2)", function()
+        local gates, steps = {}, {}
+        -- Raw literal table: no metatable, applicable_under field absent
+        local v = { label = "BLOCKED", next_action = "halt" }
+        ps.gate_decide(gates, steps, "g", v, nil, { strategy = "topic-only" })
+
+        -- Must NOT skip — Crux 2: method-absent → default "*" → always apply
+        expect(gates.g.skipped).to.equal(nil)
+        expect(#steps).to.equal(1)
+    end)
+
+    -- Non-table ctx raises error
+    it("errors when ctx is a non-table non-nil value", function()
+        local gates, steps = {}, {}
+        local v = ps.verdict({ label = "PASS", next_action = nil })
+        local ok, err = pcall(ps.gate_decide, gates, steps, "g", v, nil, "not-a-table")
+        expect(ok).to.equal(false)
+        expect(type(err)).to.equal("string")
+        expect(err:find("ctx must be a table or nil") ~= nil).to.equal(true)
+    end)
+
+    -- skip_reason string contains strategy name
+    it("skip_reason includes the strategy name for observability", function()
+        local gates, steps = {}, {}
+        local v = ps.verdict({ label = "PASS", next_action = nil, applicable_under = { "topic-only" } })
+        ps.gate_decide(gates, steps, "g", v, nil, { strategy = "main" })
+
+        expect(gates.g.skip_reason:find("main") ~= nil).to.equal(true)
+    end)
+
+    -- save_fn is invoked even on skip path
+    it("invokes save_fn on skip path", function()
+        local gates, steps = {}, {}
+        local v = ps.verdict({ label = "PASS", next_action = nil, applicable_under = { "topic-only" } })
+        local save_called = false
+        ps.gate_decide(gates, steps, "g", v, function() save_called = true end, { strategy = "main" })
+
+        expect(save_called).to.equal(true)
+        expect(gates.g.skipped).to.equal(true)
+    end)
+end)
+
 -- ─── State:gate_decide ───────────────────────────────────────────────────────
 
 describe("State:gate_decide", function()
