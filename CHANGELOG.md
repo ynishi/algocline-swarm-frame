@@ -1,5 +1,58 @@
 # Changelog
 
+## v0.6.0 (YYYY-MM-DD, additive)
+
+### Added — swarm_frame
+
+- `swarm_frame.plain_state.gate_decide` signature 拡張: 第 6 引数に `ctx?` を追加し
+  `(gates, completed_steps, name, verdict, save_fn?, ctx?)` となった。
+  `ctx` は省略または `nil` 渡し可。省略時は v0.5.0 と bit-identical な動作を保証する
+  (Crux 1: ctx omission bit-identical compat)。
+
+- `Verdict:applicable_under()` method を metatable に追加。default 実装は
+  `self.applicable_under or "*"` を返す。factory (`M.verdict`) 経由で生成した
+  Verdict は常に本 method を持つ。factory 外の literal table verdict は
+  `applicable_under` field / method を持たなくてよく、その場合は `"*"` (全 strategy
+  で適用) として扱われる (Crux 2: custom Verdict method-absent default)。
+  `applicable_under` は factory 呼び出し時点でのみ設定可能で、後付け setter は
+  Frame 側に存在しない (Crux 3: applicable_under factory-only immutability)。
+
+- `swarm_frame.State:gate_decide(name, verdict, save_fn?, ctx?)` — 第 4 引数 `ctx?`
+  を追加。`plain_state.gate_decide` への thin delegate として ctx を透過 pass-through
+  する。
+
+### Contract — ctx-aware gate routing
+
+```
+[ctx 省略時 (v0.5.0 互換パス)]
+  gate_decide(...) と gate_decide(..., nil, nil) は gates[name] の shape が
+  bit-identical であることを保証する。既存の 5-arg 呼び出し形式は変更不要。
+
+[ctx あり / applicable_under 照合パス]
+  ctx.strategy が verdict:applicable_under() の返す list に含まれる場合:
+    → 通常の transition (halt/pass 判定 → completed_steps append 等)
+  ctx.strategy が list に含まれない場合:
+    → gates[name].skipped = true
+    → gates[name].skip_reason = "ctx.strategy '<s>' not in applicable_under"
+    → retries は +1 (呼び出し回数)
+    → marked_at 不設定 / completed_steps append なし
+    → gates[name].verdict は pass-through 保存 (Rich Verdict 契約と一貫)
+
+[method-absent / 値不正 フォールバック]
+  verdict.applicable_under が function でない (literal table 等) → "*" 扱い
+  ctx.strategy が nil (ctx={} 等) → applicability check skip → 全 strategy で apply
+  ctx が nil → 従来 path (bit-identical)
+```
+
+### Version bump
+
+- `swarm_frame` v0.5.0 → v0.6.0 (minor additive)
+- `swarm_frame.plain_state.VERSION` 同 (sub-module 揃え)
+- `swarm_frame.normalize.VERSION` 同 (sub-module 揃え)
+- `M.meta.version` 同
+- `packages/swarm_frame/init.lua:13` docstring `Status: v0.3.0` → `v0.6.0` (debt #3 同時解消)
+- `tests/run.lua:1506` normalize.VERSION assertion `"0.4.0"` → `"0.6.0"` (debt #1 同時解消)
+
 ## v0.5.0 (2026-05-19, additive)
 
 ### Added — swarm_frame

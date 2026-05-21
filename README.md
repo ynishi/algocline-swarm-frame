@@ -125,8 +125,8 @@ and `alc_pkg_link` the `packages/` directory as shown in "Setup".
 
 ## Status
 
-v0.5.0. Frame core (`swarm_frame` v0.5.0) with Rich Verdict 2-layer
-separation and `gate_decide` primitive. Token & Prompt round-trip
+v0.6.0. Frame core (`swarm_frame` v0.6.0) with ctx-aware gate routing
+on top of Rich Verdict 2-layer separation. Token & Prompt round-trip
 primitive (`swarm_frame_algocline` v0.1.1), and Swarm aggregate plugin
 (`swarm_aggregate_plugin` v0.1.0) bridging multi-agent debate (dmad
 / Du 2023) onto the dispatcher. Lua tests + mock smoke + real-LLM
@@ -153,6 +153,42 @@ New surface:
 - `swarm_frame.State:gate_decide(name, verdict, save_fn?)` — method
   form; delegates to `plain_state.gate_decide` after lazy-initialising
   `_data.gates` / `_data.completed_steps`.
+
+### Context-aware gate routing (v0.6.0)
+
+`gate_decide` now accepts an optional `ctx` argument, enabling
+per-call routing decisions based on the execution context.
+
+New signatures:
+- `swarm_frame.plain_state.gate_decide(gates, completed_steps, name,
+  verdict, save_fn?, ctx?)` — free-function form extended with `ctx`.
+- `swarm_frame.State:gate_decide(name, verdict, save_fn?, ctx?)` —
+  method form; thin delegate that passes `ctx` through to
+  `plain_state.gate_decide`.
+
+`Verdict:applicable_under()` method:
+- Factory-produced Verdicts carry an `applicable_under` field whose
+  value domain is `"*"` (all strategies) or `list<string>` (explicit
+  allow-list).
+- Default implementation returns `self.applicable_under or "*"`.
+- Factory-external literal Verdict tables that lack an
+  `applicable_under` method are treated as universally applicable
+  (`"*"`) — they never cause an error or unconditional skip.
+
+Routing behaviour when `ctx` is provided:
+- If `ctx.strategy` is in the verdict's `applicable_under` list (or
+  `applicable_under == "*"`): normal transition proceeds.
+- If `ctx.strategy` is not in the list: the gate is **skipped** —
+  `gates[name].skipped = true` and `gates[name].skip_reason` are
+  recorded; `retries` is incremented; `completed_steps` is not
+  appended; `marked_at` is not set.
+- The full verdict object is still stored in `gates[name].verdict`
+  on skip (Rich Verdict pass-through contract applies to all paths).
+
+Backward compatibility:
+- Omitting `ctx` (or passing `nil`) preserves v0.5.0 bit-identical
+  behaviour for all existing call sites. No changes to consumers
+  using the 3-arg or 5-arg form are required.
 
 ## License
 

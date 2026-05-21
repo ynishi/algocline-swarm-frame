@@ -413,3 +413,55 @@ describe("State:gate_decide", function()
         expect(st2._data.gates.gate_p.retries).to.equal(2)
     end)
 end)
+
+-- ─── State:gate_decide ctx pass-through ──────────────────────────────────────
+
+describe("State:gate_decide ctx pass-through", function()
+    -- Crux 1 transitivity: 2-arg and 4-arg ctx=nil must produce bit-identical shape
+    it("2-arg and 4-arg ctx=nil produce bit-identical gates[name] shape", function()
+        local v = ps.verdict({ label = "PASS", next_action = nil })
+
+        local st1 = frame.state_new()
+        st1:gate_decide("g", v)
+
+        local st2 = frame.state_new()
+        st2:gate_decide("g", v, nil, nil)
+
+        expect(st1._data.gates.g.retries).to.equal(st2._data.gates.g.retries)
+        expect(st1._data.gates.g.skipped).to.equal(st2._data.gates.g.skipped)
+        expect(#st1._data.completed_steps).to.equal(#st2._data.completed_steps)
+    end)
+
+    -- applicable_under mismatch → skipped=true at State layer
+    it("skips gate when ctx.strategy is not in applicable_under", function()
+        local v = ps.verdict({ label = "PASS", next_action = nil, applicable_under = { "other" } })
+        local st = frame.state_new()
+        st:gate_decide("g", v, nil, { strategy = "topic-only" })
+        expect(st._data.gates.g.skipped).to.equal(true)
+        expect(#st._data.completed_steps).to.equal(0)
+    end)
+
+    -- applicable_under match → normal transition at State layer
+    it("applies gate when ctx.strategy matches applicable_under", function()
+        local v = ps.verdict({ label = "BLOCKED", next_action = "halt", applicable_under = { "topic-only" } })
+        local st = frame.state_new()
+        st:gate_decide("g", v, nil, { strategy = "topic-only" })
+        expect(st._data.gates.g.skipped).to.equal(nil)
+        expect(#st._data.completed_steps).to.equal(1)
+    end)
+
+    -- dump/restore round-trip preserves skipped tag
+    it("preserves skipped tag across dump/restore", function()
+        local v = ps.verdict({ label = "PASS", next_action = nil, applicable_under = { "other" } })
+        local st = frame.state_new()
+        st:gate_decide("sk_gate", v, nil, { strategy = "topic-only" })
+        expect(st._data.gates.sk_gate.skipped).to.equal(true)
+
+        local dumped = st:dump()
+        local st2 = frame.state_new()
+        st2:restore(dumped)
+
+        expect(st2._data.gates.sk_gate.skipped).to.equal(true)
+        expect(type(st2._data.gates.sk_gate.skip_reason)).to.equal("string")
+    end)
+end)
