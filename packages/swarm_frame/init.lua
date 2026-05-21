@@ -10,12 +10,12 @@
 --- Schema-as-Data and the persistable-by-construction invariant are
 --- inherited from lshape. See design/design-doc.md for details.
 ---
---- Status: v0.3.0 (M.host seam, spec/ 規約導入). API surface is under
+--- Status: v0.6.0 (ctx-aware gate routing on top of Rich Verdict 2-layer). API surface is under
 --- verification through the bundled_base_curator_orch rewrite.
 
 local M = {}
 
-M.VERSION = "0.5.0"
+M.VERSION = "0.6.0"
 
 -- DI seam: inject a custom JSON host to override the auto-detect chain.
 -- Set to a table { encode = fn, decode = fn } before any JSON helper is
@@ -101,7 +101,7 @@ function M._reset_host_for_testing() M.host = nil end
 
 M.meta = {
     name = "swarm_frame",
-    version = "0.5.0",
+    version = "0.6.0",
     category = "frame",
     description = "Thin runtime for ProgramableSwarm — state container, "
         .. "session-key path registry, verdict parser, linear pipeline runner, "
@@ -208,10 +208,11 @@ function State:step_mark(step_id) self._step_done[step_id] = true end
 --- @param name string       gate identifier
 --- @param verdict table     Rich Verdict (from M.plain_state.verdict or literal)
 --- @param save_fn fun()?    optional persistence callback
-function State:gate_decide(name, verdict, save_fn)
+--- @param ctx table?        optional routing context (e.g. { strategy = "..." })
+function State:gate_decide(name, verdict, save_fn, ctx)
     self._data.gates = self._data.gates or {}
     self._data.completed_steps = self._data.completed_steps or {}
-    M.plain_state.gate_decide(self._data.gates, self._data.completed_steps, name, verdict, save_fn)
+    M.plain_state.gate_decide(self._data.gates, self._data.completed_steps, name, verdict, save_fn, ctx)
 end
 
 function State:log_phase(step, kind, detail)
