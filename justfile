@@ -60,6 +60,15 @@ ga-spike:
 market-spike:
     lua examples/market_spike/main.lua
 
+# Iterated PD Primitive spike (umbrella 1779690943-76260 §9 W15).
+# N=8 + 5 gens + 10 rounds/gen tournament + mixed cooperation strategy,
+# composed from 5 Primitives: slot_table (P1) + scalar_pool (P2, NEW)
+# + lineage (P4) + Q1 mutation_op (lineage subordinate) + transition_rules
+# (P7 selection). Closes Primitive verify (6/7 + Q1 subordinate; P5
+# knowledge_channel deferred to LLM-bearing future spike).
+pd-spike:
+    lua examples/pd_spike/main.lua
+
 # Run a single real-LLM end-to-end via agent-block. `name` is the
 # filename stem under scripts/e2e/. Drives the agent ReAct loop +
 # spawned `alc` MCP server. Real API calls — incurs charges.
