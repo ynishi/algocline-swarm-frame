@@ -2982,6 +2982,91 @@ describe("scalar_pool (P2 Primitive spike)", function()
     end)
 end)
 
+-- ─── knowledge_channel (P5 Primitive spike, umbrella W4) ──────────────
+
+local kc = require("knowledge_channel")
+
+describe("knowledge_channel (P5 Primitive spike)", function()
+    it("new() builds empty channel (size 0, no history)", function()
+        local K = kc.new()
+        expect(K:size()).to.equal(0)
+        expect(#K:history()).to.equal(0)
+    end)
+
+    it("transfer() applies transform_fn and records history", function()
+        local K = kc.new()
+        K:set_transform(function(payload) return { v = payload.v * 2 } end)
+        local out = K:transfer(1, 2, { v = 5 })
+        expect(out.v).to.equal(10)
+        expect(K:size()).to.equal(1)
+        local h = K:history()
+        expect(h[1].predecessor).to.equal(1)
+        expect(h[1].successor).to.equal(2)
+    end)
+
+    it("transfer() forwards ctx to transform_fn", function()
+        local K = kc.new()
+        K:set_transform(function(payload, ctx)
+            return { v = payload.v, gen = ctx and ctx.gen or -1 }
+        end)
+        local out = K:transfer(1, 2, { v = 0 }, { gen = 7 })
+        expect(out.gen).to.equal(7)
+    end)
+
+    it("transfer() works without ctx (ctx = nil)", function()
+        local K = kc.new()
+        K:set_transform(function(payload, ctx)
+            return { v = payload.v, has_ctx = ctx ~= nil }
+        end)
+        local out = K:transfer(1, 2, { v = 1 })
+        expect(out.has_ctx).to.equal(false)
+    end)
+
+    it("transfer() supports schema reshape (transform may add / drop fields)", function()
+        local K = kc.new()
+        K:set_transform(function(payload)
+            return { sum = (payload.a or 0) + (payload.b or 0) }
+        end)
+        local out = K:transfer(1, 2, { a = 3, b = 4, c = "drop" })
+        expect(out.sum).to.equal(7)
+        expect(out.a).to.equal(nil)
+        expect(out.c).to.equal(nil)
+    end)
+
+    it("transfer() without set_transform errors", function()
+        local K = kc.new()
+        local ok, err = pcall(function() K:transfer(1, 2, {}) end)
+        expect(ok).to.equal(false)
+        expect(tostring(err):find("transform_fn not set")).to_not.equal(nil)
+    end)
+
+    it("transform_fn returning non-table errors", function()
+        local K = kc.new()
+        K:set_transform(function() return "not a table" end)
+        local ok, err = pcall(function() K:transfer(1, 2, {}) end)
+        expect(ok).to.equal(false)
+        expect(tostring(err):find("must return table")).to_not.equal(nil)
+    end)
+
+    it("transfer() rejects invalid slot / payload / ctx types", function()
+        local K = kc.new()
+        K:set_transform(function() return {} end)
+        expect(pcall(function() K:transfer(0, 1, {}) end)).to.equal(false)
+        expect(pcall(function() K:transfer(1, -1, {}) end)).to.equal(false)
+        expect(pcall(function() K:transfer(1, 2, "no") end)).to.equal(false)
+        expect(pcall(function() K:transfer(1, 2, {}, "no") end)).to.equal(false)
+    end)
+
+    it("history() returns defensive copy", function()
+        local K = kc.new()
+        K:set_transform(function() return {} end)
+        K:transfer(1, 2, {})
+        local h = K:history()
+        h[#h + 1] = { predecessor = 99, successor = 99 }
+        expect(K:size()).to.equal(1)
+    end)
+end)
+
 -- Final exit code: non-zero on failure
 local results = lust.get_results()
 print()

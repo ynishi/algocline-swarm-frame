@@ -69,6 +69,15 @@ market-spike:
 pd-spike:
     lua examples/pd_spike/main.lua
 
+# Arena (reduced) Primitive spike (umbrella 1779690943-76260 §9 W4).
+# N=6 + 4 gens + 3 rounds/gen plurality vote, composed from 6
+# Primitives: slot_table (P1) + scalar_pool (P2) + lineage (P4) + Q1
+# (lineage subordinate) + knowledge_channel (P5, NEW) + broadcast_bus
+# (P6 plurality vote aggregation) + transition_rules (P7). Closes
+# Primitive verify 7/7 + Q1 subordinate; P5 covers the last gap.
+arena-spike:
+    lua examples/arena_spike/main.lua
+
 # Run a single real-LLM end-to-end via agent-block. `name` is the
 # filename stem under scripts/e2e/. Drives the agent ReAct loop +
 # spawned `alc` MCP server. Real API calls — incurs charges.
