@@ -44,6 +44,14 @@ pop-spike:
 conway-spike:
     lua examples/conway_gol_spike/main.lua
 
+# Pure GA Primitive spike (umbrella 1779690943-76260 §9 (v) A).
+# N=10 + 8 gens + scalar fitness landscape, composed from 4 Primitives:
+# slot_table (P1) + lineage (P4) + Q1 mutation_op (lineage subordinate)
+# + transition_rules (P7 selection). Verifies Domain 抽象度 on the
+# evolutionary algorithm end, orthogonal to Conway.
+ga-spike:
+    lua examples/ga_spike/main.lua
+
 # Run a single real-LLM end-to-end via agent-block. `name` is the
 # filename stem under scripts/e2e/. Drives the agent ReAct loop +
 # spawned `alc` MCP server. Real API calls — incurs charges.
