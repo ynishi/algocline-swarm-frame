@@ -52,6 +52,14 @@ conway-spike:
 ga-spike:
     lua examples/ga_spike/main.lua
 
+# Zero-sum market Primitive spike (umbrella 1779690943-76260 §9 W13).
+# N=8 traders + 20 rounds + bankrupt/reentry, composed from 3 Primitives:
+# slot_table (P1) + ledger (P3, NEW) + transition_rules (P7 double-headed
+# active<->bankrupt verifying transition (b)). Verifies the conservation
+# invariant total() == credit_total() at end.
+market-spike:
+    lua examples/market_spike/main.lua
+
 # Run a single real-LLM end-to-end via agent-block. `name` is the
 # filename stem under scripts/e2e/. Drives the agent ReAct loop +
 # spawned `alc` MCP server. Real API calls — incurs charges.
