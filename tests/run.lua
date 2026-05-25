@@ -2521,6 +2521,194 @@ describe("swarm_population (Population primitive spike)", function()
     end)
 end)
 
+-- ─── Conway GoL Primitive spike (umbrella 1779690943-76260) ──────────
+-- 3 Primitive set boundary specs: slot_table / broadcast_bus /
+-- transition_rules. Verifies the Pure Primitive set works on a
+-- cellular-automaton domain (W1 in primitives-draft.md §2).
+
+local st = require("slot_table")
+local bb = require("broadcast_bus")
+local tr = require("transition_rules")
+
+describe("slot_table (P1 Primitive spike)", function()
+    it("new(n, init_fn) builds n slots via per-slot init_fn(idx)", function()
+        local s = st.new(3, function(i) return { id = i, state = "dead" } end)
+        expect(s:size()).to.equal(3)
+        expect(s:get(1).id).to.equal(1)
+        expect(s:get(3).id).to.equal(3)
+        expect(s:get(2).state).to.equal("dead")
+    end)
+
+    it("set(idx, payload) is state-write (replaces slot)", function()
+        local s = st.new(2, function() return { v = 0 } end)
+        s:set(1, { v = 99 })
+        expect(s:get(1).v).to.equal(99)
+        expect(s:get(2).v).to.equal(0)
+    end)
+
+    it("iter() yields (idx, payload) in slot order", function()
+        local s = st.new(3, function(i) return { i = i } end)
+        local seen = {}
+        for idx, payload in s:iter() do
+            seen[#seen + 1] = idx
+            expect(payload.i).to.equal(idx)
+        end
+        expect(#seen).to.equal(3)
+        expect(seen[1]).to.equal(1)
+        expect(seen[3]).to.equal(3)
+    end)
+
+    it("new() rejects n<1 / non-integer", function()
+        expect(pcall(st.new, 0, function() return {} end)).to.equal(false)
+        expect(pcall(st.new, -1, function() return {} end)).to.equal(false)
+        expect(pcall(st.new, 1.5, function() return {} end)).to.equal(false)
+    end)
+
+    it("new() rejects init_fn returning non-table", function()
+        local ok, err = pcall(st.new, 2, function() return "nope" end)
+        expect(ok).to.equal(false)
+        expect(tostring(err):find("must return table")).to_not.equal(nil)
+    end)
+
+    it("get()/set() reject out-of-range idx", function()
+        local s = st.new(2, function() return {} end)
+        expect(pcall(function() s:get(0) end)).to.equal(false)
+        expect(pcall(function() s:get(3) end)).to.equal(false)
+        expect(pcall(function() s:set(0, {}) end)).to.equal(false)
+        expect(pcall(function() s:set(3, {}) end)).to.equal(false)
+    end)
+end)
+
+describe("broadcast_bus (P6 Primitive spike)", function()
+    it("new() builds empty bus, aggregate_for returns agg_fn({}) when no msgs", function()
+        local bus = bb.new()
+        local r = bus:aggregate_for(1, function() return true end, function(msgs) return #msgs end)
+        expect(r).to.equal(0)
+    end)
+
+    it("publish + aggregate_for sums msgs from selected sources", function()
+        local bus = bb.new()
+        bus:publish(1, 1)
+        bus:publish(2, 1)
+        bus:publish(3, 1)
+        local r = bus:aggregate_for(
+            10,
+            function(src) return src == 1 or src == 3 end,
+            function(msgs)
+                local s = 0
+                for _, v in ipairs(msgs) do s = s + v end
+                return s
+            end
+        )
+        expect(r).to.equal(2)
+    end)
+
+    it("selector_fn filters by src predicate; agg_fn shapes output", function()
+        local bus = bb.new()
+        bus:publish(5, "a")
+        bus:publish(6, "b")
+        bus:publish(7, "c")
+        local r = bus:aggregate_for(
+            1,
+            function(src) return src % 2 == 1 end,
+            function(msgs) return table.concat(msgs, ",") end
+        )
+        expect(r).to.equal("a,c")
+    end)
+
+    it("reset() clears all msgs", function()
+        local bus = bb.new()
+        bus:publish(1, 1)
+        bus:reset()
+        local r = bus:aggregate_for(1, function() return true end, function(msgs) return #msgs end)
+        expect(r).to.equal(0)
+    end)
+
+    it("publish() rejects non-positive-integer src", function()
+        local bus = bb.new()
+        expect(pcall(function() bus:publish(0, "x") end)).to.equal(false)
+        expect(pcall(function() bus:publish(-1, "x") end)).to.equal(false)
+        expect(pcall(function() bus:publish(1.5, "x") end)).to.equal(false)
+    end)
+
+    it("aggregate_for() rejects non-function selector / agg", function()
+        local bus = bb.new()
+        expect(pcall(function() bus:aggregate_for(1, "no", function() end) end)).to.equal(false)
+        expect(pcall(function() bus:aggregate_for(1, function() end, "no") end)).to.equal(false)
+    end)
+end)
+
+describe("transition_rules (P7 Primitive spike)", function()
+    it("Conway B3/S23 encodes in 3 add() calls; first match wins", function()
+        local rules = tr.new()
+        rules:add("dead", "alive", function(_, c) return c.alive_neighbors == 3 end)
+        rules:add("alive", "alive", function(_, c)
+            return c.alive_neighbors == 2 or c.alive_neighbors == 3
+        end)
+        rules:add("alive", "dead", function() return true end)
+        expect(rules:size()).to.equal(3)
+
+        -- birth at 3 neighbors
+        local r1 = rules:apply({ state = "dead" }, { alive_neighbors = 3 })
+        expect(r1.state).to.equal("alive")
+
+        -- survive at 2
+        local r2 = rules:apply({ state = "alive" }, { alive_neighbors = 2 })
+        expect(r2.state).to.equal("alive")
+
+        -- survive at 3
+        local r3 = rules:apply({ state = "alive" }, { alive_neighbors = 3 })
+        expect(r3.state).to.equal("alive")
+
+        -- die at 1
+        local r4 = rules:apply({ state = "alive" }, { alive_neighbors = 1 })
+        expect(r4.state).to.equal("dead")
+
+        -- die at 4 (overcrowding)
+        local r5 = rules:apply({ state = "alive" }, { alive_neighbors = 4 })
+        expect(r5.state).to.equal("dead")
+
+        -- stay dead at 2 (no birth rule matches)
+        local r6 = rules:apply({ state = "dead" }, { alive_neighbors = 2 })
+        expect(r6.state).to.equal("dead")
+    end)
+
+    it("apply() preserves non-state fields (shallow copy)", function()
+        local rules = tr.new()
+        rules:add("alive", "dead", function() return true end)
+        local out = rules:apply({ state = "alive", age = 7, name = "x" }, {})
+        expect(out.state).to.equal("dead")
+        expect(out.age).to.equal(7)
+        expect(out.name).to.equal("x")
+    end)
+
+    it("apply() returns shallow copy with unchanged state when no rule matches", function()
+        local rules = tr.new()
+        rules:add("alive", "dead", function() return false end)
+        local input = { state = "alive", v = 1 }
+        local out = rules:apply(input, {})
+        expect(out.state).to.equal("alive")
+        expect(out.v).to.equal(1)
+        -- snapshot semantics: mutating returned out must not affect input
+        out.v = 999
+        expect(input.v).to.equal(1)
+    end)
+
+    it("add() rejects empty / non-string from/to", function()
+        local rules = tr.new()
+        expect(pcall(function() rules:add("", "x", function() end) end)).to.equal(false)
+        expect(pcall(function() rules:add("x", "", function() end) end)).to.equal(false)
+        expect(pcall(function() rules:add(nil, "x", function() end) end)).to.equal(false)
+    end)
+
+    it("apply() rejects payload without string state", function()
+        local rules = tr.new()
+        rules:add("alive", "dead", function() return true end)
+        expect(pcall(function() rules:apply({}, {}) end)).to.equal(false)
+        expect(pcall(function() rules:apply({ state = 42 }, {}) end)).to.equal(false)
+    end)
+end)
+
 -- Final exit code: non-zero on failure
 local results = lust.get_results()
 print()

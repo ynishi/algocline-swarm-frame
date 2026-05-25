@@ -37,6 +37,13 @@ smoke:
 pop-spike:
     lua examples/population_spike/main.lua
 
+# Conway GoL Primitive spike (umbrella 1779690943-76260 §9 (iv)).
+# 5x5 grid + glider + 5 generations, composed from 3 Pure Primitives:
+# slot_table (P1) + broadcast_bus (P6) + transition_rules (P7).
+# Verifies Domain 抽象度 quality on the cellular-automaton end.
+conway-spike:
+    lua examples/conway_gol_spike/main.lua
+
 # Run a single real-LLM end-to-end via agent-block. `name` is the
 # filename stem under scripts/e2e/. Drives the agent ReAct loop +
 # spawned `alc` MCP server. Real API calls — incurs charges.
