@@ -2455,6 +2455,72 @@ describe("run_linear — next_action flow to ctx.result (v0.4)", function()
     end)
 end)
 
+-- ─── swarm_population (spike, issue 1779687339-50091) ────────────────
+
+local sp = require("swarm_population")
+
+describe("swarm_population (Population primitive spike)", function()
+    it("new(spec, n) builds N agents with shallow-copied spec + _slot", function()
+        local pop = sp.new({ temperature = 0.5, score = 0 }, 3)
+        expect(pop:size()).to.equal(3)
+        expect(pop:get(1).temperature).to.equal(0.5)
+        expect(pop:get(1)._slot).to.equal(1)
+        expect(pop:get(3)._slot).to.equal(3)
+    end)
+
+    it("iter() yields (idx, agent) in slot order", function()
+        local pop = sp.new({ k = "v" }, 3)
+        local seen = {}
+        for idx, agent in pop:iter() do
+            seen[#seen + 1] = idx
+            expect(agent.k).to.equal("v")
+        end
+        expect(seen[1]).to.equal(1)
+        expect(seen[2]).to.equal(2)
+        expect(seen[3]).to.equal(3)
+        expect(#seen).to.equal(3)
+    end)
+
+    it("replace(idx, agent) swaps the slot without affecting others", function()
+        local pop = sp.new({ x = 1 }, 2)
+        pop:replace(1, { x = 99 })
+        expect(pop:get(1).x).to.equal(99)
+        expect(pop:get(2).x).to.equal(1)
+    end)
+
+    it("snapshot()/restore() preserves agent fields", function()
+        local pop = sp.new({ a = 1, b = "z" }, 2)
+        pop:replace(2, { a = 7, b = "y" })
+        local snap = pop:snapshot()
+        expect(snap.n).to.equal(2)
+        expect(snap.agents[1].a).to.equal(1)
+        expect(snap.agents[2].b).to.equal("y")
+        local rehydrated = sp.restore(snap)
+        expect(rehydrated:size()).to.equal(2)
+        expect(rehydrated:get(2).a).to.equal(7)
+    end)
+
+    it("new() rejects non-table spec", function()
+        local ok, err = pcall(sp.new, "not a table", 3)
+        expect(ok).to.equal(false)
+        expect(tostring(err):find("spec must be table")).to_not.equal(nil)
+    end)
+
+    it("new() rejects n<1 or non-integer", function()
+        expect(pcall(sp.new, {}, 0)).to.equal(false)
+        expect(pcall(sp.new, {}, -1)).to.equal(false)
+        expect(pcall(sp.new, {}, 1.5)).to.equal(false)
+    end)
+
+    it("get()/replace() reject out-of-range idx", function()
+        local pop = sp.new({}, 2)
+        expect(pcall(function() pop:get(0) end)).to.equal(false)
+        expect(pcall(function() pop:get(3) end)).to.equal(false)
+        expect(pcall(function() pop:replace(0, {}) end)).to.equal(false)
+        expect(pcall(function() pop:replace(3, {}) end)).to.equal(false)
+    end)
+end)
+
 -- Final exit code: non-zero on failure
 local results = lust.get_results()
 print()

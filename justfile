@@ -31,6 +31,12 @@ check:
 smoke:
     lua examples/swarm_aggregate_dmad.lua
 
+# Population primitive spike (issue 1779687339-50091).
+# N=3 variant + 3-gen loop; selection/mutation policy lives in the
+# example, Population only exposes mechanical new/iter/replace/snapshot.
+pop-spike:
+    lua examples/population_spike/main.lua
+
 # Run a single real-LLM end-to-end via agent-block. `name` is the
 # filename stem under scripts/e2e/. Drives the agent ReAct loop +
 # spawned `alc` MCP server. Real API calls — incurs charges.
