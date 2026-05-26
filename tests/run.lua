@@ -2455,6 +2455,553 @@ describe("run_linear — next_action flow to ctx.result (v0.4)", function()
     end)
 end)
 
+-- ─── Conway GoL Primitive spike (umbrella 1779690943-76260) ──────────
+-- 3 Primitive set boundary specs: slot_table / broadcast_bus /
+-- transition_rules. Verifies the Pure Primitive set works on a
+-- cellular-automaton domain (W1 in primitives-draft.md §2).
+
+local civic = require("civic")
+local st = civic.slot_table
+local bb = civic.broadcast_bus
+local tr = civic.transition_rules
+
+describe("slot_table (P1 Primitive spike)", function()
+    it("new(n, init_fn) builds n slots via per-slot init_fn(idx)", function()
+        local s = st.new(3, function(i) return { id = i, state = "dead" } end)
+        expect(s:size()).to.equal(3)
+        expect(s:get(1).id).to.equal(1)
+        expect(s:get(3).id).to.equal(3)
+        expect(s:get(2).state).to.equal("dead")
+    end)
+
+    it("set(idx, payload) is state-write (replaces slot)", function()
+        local s = st.new(2, function() return { v = 0 } end)
+        s:set(1, { v = 99 })
+        expect(s:get(1).v).to.equal(99)
+        expect(s:get(2).v).to.equal(0)
+    end)
+
+    it("iter() yields (idx, payload) in slot order", function()
+        local s = st.new(3, function(i) return { i = i } end)
+        local seen = {}
+        for idx, payload in s:iter() do
+            seen[#seen + 1] = idx
+            expect(payload.i).to.equal(idx)
+        end
+        expect(#seen).to.equal(3)
+        expect(seen[1]).to.equal(1)
+        expect(seen[3]).to.equal(3)
+    end)
+
+    it("new() rejects n<1 / non-integer", function()
+        expect(pcall(st.new, 0, function() return {} end)).to.equal(false)
+        expect(pcall(st.new, -1, function() return {} end)).to.equal(false)
+        expect(pcall(st.new, 1.5, function() return {} end)).to.equal(false)
+    end)
+
+    it("new() rejects init_fn returning non-table", function()
+        local ok, err = pcall(st.new, 2, function() return "nope" end)
+        expect(ok).to.equal(false)
+        expect(tostring(err):find("must return table")).to_not.equal(nil)
+    end)
+
+    it("get()/set() reject out-of-range idx", function()
+        local s = st.new(2, function() return {} end)
+        expect(pcall(function() s:get(0) end)).to.equal(false)
+        expect(pcall(function() s:get(3) end)).to.equal(false)
+        expect(pcall(function() s:set(0, {}) end)).to.equal(false)
+        expect(pcall(function() s:set(3, {}) end)).to.equal(false)
+    end)
+end)
+
+describe("broadcast_bus (P6 Primitive spike)", function()
+    it("new() builds empty bus, aggregate_for returns agg_fn({}) when no msgs", function()
+        local bus = bb.new()
+        local r = bus:aggregate_for(1, function() return true end, function(msgs) return #msgs end)
+        expect(r).to.equal(0)
+    end)
+
+    it("publish + aggregate_for sums msgs from selected sources", function()
+        local bus = bb.new()
+        bus:publish(1, 1)
+        bus:publish(2, 1)
+        bus:publish(3, 1)
+        local r = bus:aggregate_for(
+            10,
+            function(src) return src == 1 or src == 3 end,
+            function(msgs)
+                local s = 0
+                for _, v in ipairs(msgs) do s = s + v end
+                return s
+            end
+        )
+        expect(r).to.equal(2)
+    end)
+
+    it("selector_fn filters by src predicate; agg_fn shapes output", function()
+        local bus = bb.new()
+        bus:publish(5, "a")
+        bus:publish(6, "b")
+        bus:publish(7, "c")
+        local r = bus:aggregate_for(
+            1,
+            function(src) return src % 2 == 1 end,
+            function(msgs) return table.concat(msgs, ",") end
+        )
+        expect(r).to.equal("a,c")
+    end)
+
+    it("reset() clears all msgs", function()
+        local bus = bb.new()
+        bus:publish(1, 1)
+        bus:reset()
+        local r = bus:aggregate_for(1, function() return true end, function(msgs) return #msgs end)
+        expect(r).to.equal(0)
+    end)
+
+    it("publish() rejects non-positive-integer src", function()
+        local bus = bb.new()
+        expect(pcall(function() bus:publish(0, "x") end)).to.equal(false)
+        expect(pcall(function() bus:publish(-1, "x") end)).to.equal(false)
+        expect(pcall(function() bus:publish(1.5, "x") end)).to.equal(false)
+    end)
+
+    it("aggregate_for() rejects non-function selector / agg", function()
+        local bus = bb.new()
+        expect(pcall(function() bus:aggregate_for(1, "no", function() end) end)).to.equal(false)
+        expect(pcall(function() bus:aggregate_for(1, function() end, "no") end)).to.equal(false)
+    end)
+end)
+
+describe("transition_rules (P7 Primitive spike)", function()
+    it("Conway B3/S23 encodes in 3 add() calls; first match wins", function()
+        local rules = tr.new()
+        rules:add("dead", "alive", function(_, c) return c.alive_neighbors == 3 end)
+        rules:add("alive", "alive", function(_, c)
+            return c.alive_neighbors == 2 or c.alive_neighbors == 3
+        end)
+        rules:add("alive", "dead", function() return true end)
+        expect(rules:size()).to.equal(3)
+
+        -- birth at 3 neighbors
+        local r1 = rules:apply({ state = "dead" }, { alive_neighbors = 3 })
+        expect(r1.state).to.equal("alive")
+
+        -- survive at 2
+        local r2 = rules:apply({ state = "alive" }, { alive_neighbors = 2 })
+        expect(r2.state).to.equal("alive")
+
+        -- survive at 3
+        local r3 = rules:apply({ state = "alive" }, { alive_neighbors = 3 })
+        expect(r3.state).to.equal("alive")
+
+        -- die at 1
+        local r4 = rules:apply({ state = "alive" }, { alive_neighbors = 1 })
+        expect(r4.state).to.equal("dead")
+
+        -- die at 4 (overcrowding)
+        local r5 = rules:apply({ state = "alive" }, { alive_neighbors = 4 })
+        expect(r5.state).to.equal("dead")
+
+        -- stay dead at 2 (no birth rule matches)
+        local r6 = rules:apply({ state = "dead" }, { alive_neighbors = 2 })
+        expect(r6.state).to.equal("dead")
+    end)
+
+    it("apply() preserves non-state fields (shallow copy)", function()
+        local rules = tr.new()
+        rules:add("alive", "dead", function() return true end)
+        local out = rules:apply({ state = "alive", age = 7, name = "x" }, {})
+        expect(out.state).to.equal("dead")
+        expect(out.age).to.equal(7)
+        expect(out.name).to.equal("x")
+    end)
+
+    it("apply() returns shallow copy with unchanged state when no rule matches", function()
+        local rules = tr.new()
+        rules:add("alive", "dead", function() return false end)
+        local input = { state = "alive", v = 1 }
+        local out = rules:apply(input, {})
+        expect(out.state).to.equal("alive")
+        expect(out.v).to.equal(1)
+        -- snapshot semantics: mutating returned out must not affect input
+        out.v = 999
+        expect(input.v).to.equal(1)
+    end)
+
+    it("add() rejects empty / non-string from/to", function()
+        local rules = tr.new()
+        expect(pcall(function() rules:add("", "x", function() end) end)).to.equal(false)
+        expect(pcall(function() rules:add("x", "", function() end) end)).to.equal(false)
+        expect(pcall(function() rules:add(nil, "x", function() end) end)).to.equal(false)
+    end)
+
+    it("apply() rejects payload without string state", function()
+        local rules = tr.new()
+        rules:add("alive", "dead", function() return true end)
+        expect(pcall(function() rules:apply({}, {}) end)).to.equal(false)
+        expect(pcall(function() rules:apply({ state = 42 }, {}) end)).to.equal(false)
+    end)
+end)
+
+-- ─── lineage (P4 Primitive spike, umbrella 1779690943-76260 §9 (v) A) ─
+
+local ln = civic.lineage
+
+describe("lineage (P4 Primitive + Q1 mutation_op subordinate)", function()
+    it("new() builds empty graph (size 0, no edges)", function()
+        local L = ln.new()
+        expect(L:size()).to.equal(0)
+        expect(#L:edges()).to.equal(0)
+    end)
+
+    it("beget() invokes mutation_op and records edge", function()
+        local L = ln.new()
+        L:set_mutation_op(function(p) return { v = p.v + 1, state = "active" } end)
+        local child = L:beget(1, 2, 1, { v = 10, state = "active" })
+        expect(child.v).to.equal(11)
+        expect(L:size()).to.equal(1)
+        expect(L:parent(2)).to.equal(1)
+        expect(L:generation(2)).to.equal(1)
+    end)
+
+    it("children() returns child list for parent", function()
+        local L = ln.new()
+        L:set_mutation_op(function(p) return { v = p.v } end)
+        L:beget(1, 2, 1, { v = 0 })
+        L:beget(1, 3, 1, { v = 0 })
+        L:beget(2, 4, 2, { v = 0 })
+        local kids_of_1 = L:children(1)
+        expect(#kids_of_1).to.equal(2)
+        expect(kids_of_1[1]).to.equal(2)
+        expect(kids_of_1[2]).to.equal(3)
+        expect(#L:children(2)).to.equal(1)
+        expect(L:children(2)[1]).to.equal(4)
+        expect(#L:children(99)).to.equal(0)
+    end)
+
+    it("beget() without set_mutation_op errors", function()
+        local L = ln.new()
+        local ok, err = pcall(function() L:beget(1, 2, 0, {}) end)
+        expect(ok).to.equal(false)
+        expect(tostring(err):find("mutation_op not set")).to_not.equal(nil)
+    end)
+
+    it("mutation_op returning non-table errors", function()
+        local L = ln.new()
+        L:set_mutation_op(function() return "not a table" end)
+        local ok, err = pcall(function() L:beget(1, 2, 0, {}) end)
+        expect(ok).to.equal(false)
+        expect(tostring(err):find("must return table")).to_not.equal(nil)
+    end)
+
+    it("beget() rejects invalid slot / gen / payload types", function()
+        local L = ln.new()
+        L:set_mutation_op(function() return {} end)
+        expect(pcall(function() L:beget(0, 2, 0, {}) end)).to.equal(false)
+        expect(pcall(function() L:beget(1, -1, 0, {}) end)).to.equal(false)
+        expect(pcall(function() L:beget(1, 2, -1, {}) end)).to.equal(false)
+        expect(pcall(function() L:beget(1, 2, 0, "no") end)).to.equal(false)
+    end)
+
+    it("edges() and children() return defensive copies", function()
+        local L = ln.new()
+        L:set_mutation_op(function() return {} end)
+        L:beget(1, 2, 0, {})
+        local e1 = L:edges()
+        e1[#e1 + 1] = { parent = 99, child = 99, gen = 99 }
+        expect(L:size()).to.equal(1)  -- unaffected by external mutation
+        local kids = L:children(1)
+        kids[#kids + 1] = 999
+        expect(#L:children(1)).to.equal(1)
+    end)
+end)
+
+-- ─── ledger (P3 Primitive spike, umbrella 1779690943-76260 §9 W13) ────
+
+local lg = civic.ledger
+
+describe("ledger (P3 Primitive spike)", function()
+    it("new() builds empty ledger (total=0, credit_total=0, size=0)", function()
+        local L = lg.new()
+        expect(L:total()).to.equal(0)
+        expect(L:credit_total()).to.equal(0)
+        expect(L:size()).to.equal(0)
+        expect(L:balance(1)).to.equal(0)
+    end)
+
+    it("credit() increases balance + credit_total (external inflow)", function()
+        local L = lg.new()
+        L:credit(1, 100)
+        L:credit(2, 50)
+        expect(L:balance(1)).to.equal(100)
+        expect(L:balance(2)).to.equal(50)
+        expect(L:total()).to.equal(150)
+        expect(L:credit_total()).to.equal(150)
+    end)
+
+    it("transfer() is zero-sum: total() invariant after transfer", function()
+        local L = lg.new()
+        L:credit(1, 100)
+        L:credit(2, 100)
+        local before = L:total()
+        local ok = L:transfer(1, 2, 30)
+        expect(ok).to.equal(true)
+        expect(L:balance(1)).to.equal(70)
+        expect(L:balance(2)).to.equal(130)
+        expect(L:total()).to.equal(before)
+    end)
+
+    it("conservation invariant: total() == credit_total() across mixed ops", function()
+        local L = lg.new()
+        L:credit(1, 100)
+        L:credit(2, 100)
+        L:transfer(1, 2, 30)
+        L:transfer(2, 1, 10)
+        L:credit(3, 50)
+        L:transfer(3, 1, 20)
+        expect(L:total()).to.equal(L:credit_total())
+    end)
+
+    it("transfer() returns false on insufficient funds (default)", function()
+        local L = lg.new()
+        L:credit(1, 30)
+        L:credit(2, 0)
+        local ok = L:transfer(1, 2, 50)
+        expect(ok).to.equal(false)
+        -- balances and total unchanged
+        expect(L:balance(1)).to.equal(30)
+        expect(L:balance(2)).to.equal(0)
+        expect(L:total()).to.equal(30)
+    end)
+
+    it("allow_negative=true permits balance to go below zero", function()
+        local L = lg.new({ allow_negative = true })
+        L:credit(1, 10)
+        local ok = L:transfer(1, 2, 50)
+        expect(ok).to.equal(true)
+        expect(L:balance(1)).to.equal(-40)
+        expect(L:balance(2)).to.equal(50)
+        expect(L:total()).to.equal(L:credit_total())  -- still conserved
+    end)
+
+    it("transfer() to self errors", function()
+        local L = lg.new()
+        L:credit(1, 100)
+        expect(pcall(function() L:transfer(1, 1, 10) end)).to.equal(false)
+    end)
+
+    it("transfer() / credit() reject invalid args", function()
+        local L = lg.new()
+        expect(pcall(function() L:credit(0, 10) end)).to.equal(false)
+        expect(pcall(function() L:credit(1, -1) end)).to.equal(false)
+        expect(pcall(function() L:transfer(0, 1, 10) end)).to.equal(false)
+        expect(pcall(function() L:transfer(1, 0, 10) end)).to.equal(false)
+        expect(pcall(function() L:transfer(1, 2, 0) end)).to.equal(false)
+        expect(pcall(function() L:transfer(1, 2, -5) end)).to.equal(false)
+    end)
+
+    it("new() rejects non-boolean allow_negative", function()
+        expect(pcall(function() lg.new({ allow_negative = "yes" }) end)).to.equal(false)
+        expect(pcall(function() lg.new({ allow_negative = 1 }) end)).to.equal(false)
+    end)
+
+    it("transactions() returns defensive copy", function()
+        local L = lg.new()
+        L:credit(1, 10)
+        L:transfer(1, 2, 5)
+        local txs = L:transactions()
+        expect(#txs).to.equal(2)
+        txs[#txs + 1] = { kind = "fake" }
+        expect(L:size()).to.equal(2)  -- internal log unaffected
+    end)
+
+    it("transactions() logs credit and transfer kinds correctly", function()
+        local L = lg.new()
+        L:credit(1, 100)
+        L:transfer(1, 2, 40)
+        local txs = L:transactions()
+        expect(txs[1].kind).to.equal("credit")
+        expect(txs[1].to).to.equal(1)
+        expect(txs[1].amount).to.equal(100)
+        expect(txs[2].kind).to.equal("transfer")
+        expect(txs[2].from).to.equal(1)
+        expect(txs[2].to).to.equal(2)
+        expect(txs[2].amount).to.equal(40)
+    end)
+end)
+
+-- ─── scalar_pool (P2 Primitive spike, umbrella 1779690943-76260 §9 W15) ─
+
+local sp_pool = civic.scalar_pool
+
+describe("scalar_pool (P2 Primitive spike)", function()
+    it("new() builds empty pool; total/by_source on missing slot = 0", function()
+        local P = sp_pool.new()
+        expect(P:total(1)).to.equal(0)
+        expect(P:by_source(1, "x")).to.equal(0)
+        expect(#P:slots()).to.equal(0)
+    end)
+
+    it("credit() accumulates; total() sums across sources", function()
+        local P = sp_pool.new()
+        P:credit(1, "peer", 5)
+        P:credit(1, "market", 3)
+        P:credit(1, "peer", 2)  -- accumulates with existing peer bucket
+        expect(P:by_source(1, "peer")).to.equal(7)
+        expect(P:by_source(1, "market")).to.equal(3)
+        expect(P:total(1)).to.equal(10)
+    end)
+
+    it("debit() subtracts from source bucket", function()
+        local P = sp_pool.new()
+        P:credit(1, "peer", 10)
+        P:debit(1, "peer", 4)
+        expect(P:by_source(1, "peer")).to.equal(6)
+        expect(P:total(1)).to.equal(6)
+    end)
+
+    it("credit() accepts negative amount (= debit equivalence)", function()
+        local P = sp_pool.new()
+        P:credit(1, "peer", -5)
+        expect(P:by_source(1, "peer")).to.equal(-5)
+    end)
+
+    it("apply_decay(rate) multiplies every bucket by rate", function()
+        local P = sp_pool.new()
+        P:credit(1, "peer", 10)
+        P:credit(1, "market", 20)
+        P:credit(2, "peer", 4)
+        P:apply_decay(0.5)
+        expect(P:by_source(1, "peer")).to.equal(5)
+        expect(P:by_source(1, "market")).to.equal(10)
+        expect(P:by_source(2, "peer")).to.equal(2)
+    end)
+
+    it("apply_decay() rejects rate outside [0, 1]", function()
+        local P = sp_pool.new()
+        expect(pcall(function() P:apply_decay(-0.1) end)).to.equal(false)
+        expect(pcall(function() P:apply_decay(1.1) end)).to.equal(false)
+        expect(pcall(function() P:apply_decay("0.5") end)).to.equal(false)
+    end)
+
+    it("reset(slot) drops slot from pool", function()
+        local P = sp_pool.new()
+        P:credit(1, "peer", 10)
+        P:credit(2, "peer", 5)
+        P:reset(1)
+        expect(P:total(1)).to.equal(0)
+        expect(P:by_source(1, "peer")).to.equal(0)
+        expect(P:total(2)).to.equal(5)
+    end)
+
+    it("slots() returns sorted list of registered slots", function()
+        local P = sp_pool.new()
+        P:credit(3, "x", 1)
+        P:credit(1, "x", 1)
+        P:credit(2, "x", 1)
+        local s = P:slots()
+        expect(#s).to.equal(3)
+        expect(s[1]).to.equal(1)
+        expect(s[2]).to.equal(2)
+        expect(s[3]).to.equal(3)
+    end)
+
+    it("credit() / debit() reject invalid args", function()
+        local P = sp_pool.new()
+        expect(pcall(function() P:credit(0, "x", 1) end)).to.equal(false)
+        expect(pcall(function() P:credit(1, "", 1) end)).to.equal(false)
+        expect(pcall(function() P:credit(1, "x", "no") end)).to.equal(false)
+        expect(pcall(function() P:debit(0, "x", 1) end)).to.equal(false)
+        expect(pcall(function() P:debit(1, "", 1) end)).to.equal(false)
+    end)
+end)
+
+-- ─── knowledge_channel (P5 Primitive spike, umbrella W4) ──────────────
+
+local kc = civic.knowledge_channel
+
+describe("knowledge_channel (P5 Primitive spike)", function()
+    it("new() builds empty channel (size 0, no history)", function()
+        local K = kc.new()
+        expect(K:size()).to.equal(0)
+        expect(#K:history()).to.equal(0)
+    end)
+
+    it("transfer() applies transform_fn and records history", function()
+        local K = kc.new()
+        K:set_transform(function(payload) return { v = payload.v * 2 } end)
+        local out = K:transfer(1, 2, { v = 5 })
+        expect(out.v).to.equal(10)
+        expect(K:size()).to.equal(1)
+        local h = K:history()
+        expect(h[1].predecessor).to.equal(1)
+        expect(h[1].successor).to.equal(2)
+    end)
+
+    it("transfer() forwards ctx to transform_fn", function()
+        local K = kc.new()
+        K:set_transform(function(payload, ctx)
+            return { v = payload.v, gen = ctx and ctx.gen or -1 }
+        end)
+        local out = K:transfer(1, 2, { v = 0 }, { gen = 7 })
+        expect(out.gen).to.equal(7)
+    end)
+
+    it("transfer() works without ctx (ctx = nil)", function()
+        local K = kc.new()
+        K:set_transform(function(payload, ctx)
+            return { v = payload.v, has_ctx = ctx ~= nil }
+        end)
+        local out = K:transfer(1, 2, { v = 1 })
+        expect(out.has_ctx).to.equal(false)
+    end)
+
+    it("transfer() supports schema reshape (transform may add / drop fields)", function()
+        local K = kc.new()
+        K:set_transform(function(payload)
+            return { sum = (payload.a or 0) + (payload.b or 0) }
+        end)
+        local out = K:transfer(1, 2, { a = 3, b = 4, c = "drop" })
+        expect(out.sum).to.equal(7)
+        expect(out.a).to.equal(nil)
+        expect(out.c).to.equal(nil)
+    end)
+
+    it("transfer() without set_transform errors", function()
+        local K = kc.new()
+        local ok, err = pcall(function() K:transfer(1, 2, {}) end)
+        expect(ok).to.equal(false)
+        expect(tostring(err):find("transform not set")).to_not.equal(nil)
+    end)
+
+    it("transform_fn returning non-table errors", function()
+        local K = kc.new()
+        K:set_transform(function() return "not a table" end)
+        local ok, err = pcall(function() K:transfer(1, 2, {}) end)
+        expect(ok).to.equal(false)
+        expect(tostring(err):find("must return table")).to_not.equal(nil)
+    end)
+
+    it("transfer() rejects invalid slot / payload / ctx types", function()
+        local K = kc.new()
+        K:set_transform(function() return {} end)
+        expect(pcall(function() K:transfer(0, 1, {}) end)).to.equal(false)
+        expect(pcall(function() K:transfer(1, -1, {}) end)).to.equal(false)
+        expect(pcall(function() K:transfer(1, 2, "no") end)).to.equal(false)
+        expect(pcall(function() K:transfer(1, 2, {}, "no") end)).to.equal(false)
+    end)
+
+    it("history() returns defensive copy", function()
+        local K = kc.new()
+        K:set_transform(function() return {} end)
+        K:transfer(1, 2, {})
+        local h = K:history()
+        h[#h + 1] = { predecessor = 99, successor = 99 }
+        expect(K:size()).to.equal(1)
+    end)
+end)
+
 -- Final exit code: non-zero on failure
 local results = lust.get_results()
 print()

@@ -31,6 +31,47 @@ check:
 smoke:
     lua examples/swarm_aggregate_dmad.lua
 
+# Conway GoL Primitive spike (umbrella 1779690943-76260 §9 (iv)).
+# 5x5 grid + glider + 5 generations, composed from 3 Pure Primitives:
+# slot_table (P1) + broadcast_bus (P6) + transition_rules (P7).
+# Verifies Domain 抽象度 quality on the cellular-automaton end.
+conway-spike:
+    lua examples/conway_gol_spike/main.lua
+
+# Pure GA Primitive spike (umbrella 1779690943-76260 §9 (v) A).
+# N=10 + 8 gens + scalar fitness landscape, composed from 4 Primitives:
+# slot_table (P1) + lineage (P4) + Q1 mutation_op (lineage subordinate)
+# + transition_rules (P7 selection). Verifies Domain 抽象度 on the
+# evolutionary algorithm end, orthogonal to Conway.
+ga-spike:
+    lua examples/ga_spike/main.lua
+
+# Zero-sum market Primitive spike (umbrella 1779690943-76260 §9 W13).
+# N=8 traders + 20 rounds + bankrupt/reentry, composed from 3 Primitives:
+# slot_table (P1) + ledger (P3, NEW) + transition_rules (P7 double-headed
+# active<->bankrupt verifying transition (b)). Verifies the conservation
+# invariant total() == credit_total() at end.
+market-spike:
+    lua examples/market_spike/main.lua
+
+# Iterated PD Primitive spike (umbrella 1779690943-76260 §9 W15).
+# N=8 + 5 gens + 10 rounds/gen tournament + mixed cooperation strategy,
+# composed from 5 Primitives: slot_table (P1) + scalar_pool (P2, NEW)
+# + lineage (P4) + Q1 mutation_op (lineage subordinate) + transition_rules
+# (P7 selection). Closes Primitive verify (6/7 + Q1 subordinate; P5
+# knowledge_channel deferred to LLM-bearing future spike).
+pd-spike:
+    lua examples/pd_spike/main.lua
+
+# Arena (reduced) Primitive spike (umbrella 1779690943-76260 §9 W4).
+# N=6 + 4 gens + 3 rounds/gen plurality vote, composed from 6
+# Primitives: slot_table (P1) + scalar_pool (P2) + lineage (P4) + Q1
+# (lineage subordinate) + knowledge_channel (P5, NEW) + broadcast_bus
+# (P6 plurality vote aggregation) + transition_rules (P7). Closes
+# Primitive verify 7/7 + Q1 subordinate; P5 covers the last gap.
+arena-spike:
+    lua examples/arena_spike/main.lua
+
 # Run a single real-LLM end-to-end via agent-block. `name` is the
 # filename stem under scripts/e2e/. Drives the agent ReAct loop +
 # spawned `alc` MCP server. Real API calls — incurs charges.
