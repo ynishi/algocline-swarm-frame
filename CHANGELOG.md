@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.7.0 (2026-05-27, additive)
+
+### Added — examples
+
+- `examples/conway_gol_spike/` — Conway Game of Life via 3 Pure Primitives (P1/P6/P7)
+- `examples/ga_spike/` — Pure GA via P1+P4+Q1+P7
+- `examples/market_spike/` — Zero-sum market via P1+P3+P7
+- `examples/pd_spike/` — Iterated Prisoner's Dilemma via P1+P2+P4+Q1+P7
+- `examples/arena_spike/` — Arena via P1+P2+P4+Q1+P5+P6+P7
+
+### Added — infrastructure
+
+- `justfile` spike recipes (`spike-conway`, `spike-ga`, `spike-market`, `spike-pd`, `spike-arena`)
+- `tests/run.lua` extended with unit tests for new primitives (ledger P3, scalar_pool P2, knowledge_channel P5)
+
+### Fixes
+
+- `packages/swarm_aggregate_plugin/init.lua` docstring: removed internal workspace path reference
+
 ## v0.6.0 (YYYY-MM-DD, additive)
 
 ### Added — swarm_frame

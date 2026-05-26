@@ -14,8 +14,7 @@
 ---
 --- Initial release (v0.1.0): dmad only. moa / reconcile / hegelian
 --- extension is anticipated under the same `M.run_<pkg>(opts)`
---- convention but not yet implemented — the survey
---- (workspace/tasks/swarm-plugin-survey/pkg-survey.md) covers the shape.
+--- convention but not yet implemented.
 
 local M = {}
 
