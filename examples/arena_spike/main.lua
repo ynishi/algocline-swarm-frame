@@ -26,14 +26,19 @@
 --
 -- Run: lua examples/arena_spike/main.lua
 
-package.path = "./packages/?/init.lua;./packages/?.lua;" .. package.path
+local home = os.getenv("HOME") or ""
+package.path = home .. "/.algocline/packages/?/init.lua;"
+             .. home .. "/.algocline/packages/?.lua;"
+             .. "./packages/?/init.lua;./packages/?.lua;"
+             .. package.path
 
-local st = require("slot_table")
-local sp = require("scalar_pool")
-local ln = require("lineage")
-local tr = require("transition_rules")
-local bb = require("broadcast_bus")
-local kc = require("knowledge_channel")
+local civic = require("civic")
+local st = civic.slot_table
+local sp = civic.scalar_pool
+local ln = civic.lineage
+local tr = civic.transition_rules
+local bb = civic.broadcast_bus
+local kc = civic.knowledge_channel
 
 local N = 6
 local GENS = 4

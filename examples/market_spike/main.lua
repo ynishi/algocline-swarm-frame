@@ -18,11 +18,16 @@
 --
 -- Run: lua examples/market_spike/main.lua
 
-package.path = "./packages/?/init.lua;./packages/?.lua;" .. package.path
+local home = os.getenv("HOME") or ""
+package.path = home .. "/.algocline/packages/?/init.lua;"
+             .. home .. "/.algocline/packages/?.lua;"
+             .. "./packages/?/init.lua;./packages/?.lua;"
+             .. package.path
 
-local st = require("slot_table")
-local lg = require("ledger")
-local tr = require("transition_rules")
+local civic = require("civic")
+local st = civic.slot_table
+local lg = civic.ledger
+local tr = civic.transition_rules
 
 local N, ROUNDS = 8, 20
 local INITIAL = 100

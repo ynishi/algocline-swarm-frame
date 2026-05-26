@@ -18,11 +18,16 @@
 --
 -- Run: lua examples/conway_gol_spike/main.lua
 
-package.path = "./packages/?/init.lua;./packages/?.lua;" .. package.path
+local home = os.getenv("HOME") or ""
+package.path = home .. "/.algocline/packages/?/init.lua;"
+             .. home .. "/.algocline/packages/?.lua;"
+             .. "./packages/?/init.lua;./packages/?.lua;"
+             .. package.path
 
-local st = require("slot_table")
-local bb = require("broadcast_bus")
-local tr = require("transition_rules")
+local civic = require("civic")
+local st = civic.slot_table
+local bb = civic.broadcast_bus
+local tr = civic.transition_rules
 
 local W, H = 5, 5
 local GENS = 5

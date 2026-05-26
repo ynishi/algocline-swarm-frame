@@ -31,12 +31,6 @@ check:
 smoke:
     lua examples/swarm_aggregate_dmad.lua
 
-# Population primitive spike (issue 1779687339-50091).
-# N=3 variant + 3-gen loop; selection/mutation policy lives in the
-# example, Population only exposes mechanical new/iter/replace/snapshot.
-pop-spike:
-    lua examples/population_spike/main.lua
-
 # Conway GoL Primitive spike (umbrella 1779690943-76260 §9 (iv)).
 # 5x5 grid + glider + 5 generations, composed from 3 Pure Primitives:
 # slot_table (P1) + broadcast_bus (P6) + transition_rules (P7).

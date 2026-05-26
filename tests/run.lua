@@ -2455,80 +2455,15 @@ describe("run_linear — next_action flow to ctx.result (v0.4)", function()
     end)
 end)
 
--- ─── swarm_population (spike, issue 1779687339-50091) ────────────────
-
-local sp = require("swarm_population")
-
-describe("swarm_population (Population primitive spike)", function()
-    it("new(spec, n) builds N agents with shallow-copied spec + _slot", function()
-        local pop = sp.new({ temperature = 0.5, score = 0 }, 3)
-        expect(pop:size()).to.equal(3)
-        expect(pop:get(1).temperature).to.equal(0.5)
-        expect(pop:get(1)._slot).to.equal(1)
-        expect(pop:get(3)._slot).to.equal(3)
-    end)
-
-    it("iter() yields (idx, agent) in slot order", function()
-        local pop = sp.new({ k = "v" }, 3)
-        local seen = {}
-        for idx, agent in pop:iter() do
-            seen[#seen + 1] = idx
-            expect(agent.k).to.equal("v")
-        end
-        expect(seen[1]).to.equal(1)
-        expect(seen[2]).to.equal(2)
-        expect(seen[3]).to.equal(3)
-        expect(#seen).to.equal(3)
-    end)
-
-    it("replace(idx, agent) swaps the slot without affecting others", function()
-        local pop = sp.new({ x = 1 }, 2)
-        pop:replace(1, { x = 99 })
-        expect(pop:get(1).x).to.equal(99)
-        expect(pop:get(2).x).to.equal(1)
-    end)
-
-    it("snapshot()/restore() preserves agent fields", function()
-        local pop = sp.new({ a = 1, b = "z" }, 2)
-        pop:replace(2, { a = 7, b = "y" })
-        local snap = pop:snapshot()
-        expect(snap.n).to.equal(2)
-        expect(snap.agents[1].a).to.equal(1)
-        expect(snap.agents[2].b).to.equal("y")
-        local rehydrated = sp.restore(snap)
-        expect(rehydrated:size()).to.equal(2)
-        expect(rehydrated:get(2).a).to.equal(7)
-    end)
-
-    it("new() rejects non-table spec", function()
-        local ok, err = pcall(sp.new, "not a table", 3)
-        expect(ok).to.equal(false)
-        expect(tostring(err):find("spec must be table")).to_not.equal(nil)
-    end)
-
-    it("new() rejects n<1 or non-integer", function()
-        expect(pcall(sp.new, {}, 0)).to.equal(false)
-        expect(pcall(sp.new, {}, -1)).to.equal(false)
-        expect(pcall(sp.new, {}, 1.5)).to.equal(false)
-    end)
-
-    it("get()/replace() reject out-of-range idx", function()
-        local pop = sp.new({}, 2)
-        expect(pcall(function() pop:get(0) end)).to.equal(false)
-        expect(pcall(function() pop:get(3) end)).to.equal(false)
-        expect(pcall(function() pop:replace(0, {}) end)).to.equal(false)
-        expect(pcall(function() pop:replace(3, {}) end)).to.equal(false)
-    end)
-end)
-
 -- ─── Conway GoL Primitive spike (umbrella 1779690943-76260) ──────────
 -- 3 Primitive set boundary specs: slot_table / broadcast_bus /
 -- transition_rules. Verifies the Pure Primitive set works on a
 -- cellular-automaton domain (W1 in primitives-draft.md §2).
 
-local st = require("slot_table")
-local bb = require("broadcast_bus")
-local tr = require("transition_rules")
+local civic = require("civic")
+local st = civic.slot_table
+local bb = civic.broadcast_bus
+local tr = civic.transition_rules
 
 describe("slot_table (P1 Primitive spike)", function()
     it("new(n, init_fn) builds n slots via per-slot init_fn(idx)", function()
@@ -2711,7 +2646,7 @@ end)
 
 -- ─── lineage (P4 Primitive spike, umbrella 1779690943-76260 §9 (v) A) ─
 
-local ln = require("lineage")
+local ln = civic.lineage
 
 describe("lineage (P4 Primitive + Q1 mutation_op subordinate)", function()
     it("new() builds empty graph (size 0, no edges)", function()
@@ -2784,7 +2719,7 @@ end)
 
 -- ─── ledger (P3 Primitive spike, umbrella 1779690943-76260 §9 W13) ────
 
-local lg = require("ledger")
+local lg = civic.ledger
 
 describe("ledger (P3 Primitive spike)", function()
     it("new() builds empty ledger (total=0, credit_total=0, size=0)", function()
@@ -2898,7 +2833,7 @@ end)
 
 -- ─── scalar_pool (P2 Primitive spike, umbrella 1779690943-76260 §9 W15) ─
 
-local sp_pool = require("scalar_pool")
+local sp_pool = civic.scalar_pool
 
 describe("scalar_pool (P2 Primitive spike)", function()
     it("new() builds empty pool; total/by_source on missing slot = 0", function()
@@ -2984,7 +2919,7 @@ end)
 
 -- ─── knowledge_channel (P5 Primitive spike, umbrella W4) ──────────────
 
-local kc = require("knowledge_channel")
+local kc = civic.knowledge_channel
 
 describe("knowledge_channel (P5 Primitive spike)", function()
     it("new() builds empty channel (size 0, no history)", function()
@@ -3037,7 +2972,7 @@ describe("knowledge_channel (P5 Primitive spike)", function()
         local K = kc.new()
         local ok, err = pcall(function() K:transfer(1, 2, {}) end)
         expect(ok).to.equal(false)
-        expect(tostring(err):find("transform_fn not set")).to_not.equal(nil)
+        expect(tostring(err):find("transform not set")).to_not.equal(nil)
     end)
 
     it("transform_fn returning non-table errors", function()
