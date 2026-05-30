@@ -3003,6 +3003,7 @@ describe("knowledge_channel (P5 Primitive spike)", function()
 end)
 
 dofile("packages/swarm_frame/spec/artifact_store_spec.lua")
+dofile("packages/swarm_frame_algocline/spec/resolve_task_dir_spec.lua")
 
 -- Final exit code: non-zero on failure
 local results = lust.get_results()
