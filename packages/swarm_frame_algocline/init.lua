@@ -35,15 +35,15 @@
 --- (`before_dispatch` / `around_dispatch` / `after_dispatch` /
 --- `finalize`) for callers to layer the rest on top.
 ---
---- Status: v0.1.1 (Token & Prompt + format mode).
+--- Status: v0.1.2 (Token & Prompt + format mode).
 
 local M = {}
 
-M.VERSION = "0.1.1"
+M.VERSION = "0.1.2"
 
 M.meta = {
     name = "swarm_frame_algocline",
-    version = "0.1.1",
+    version = "0.1.2",
     category = "frame_primitive",
     description = "Token & Prompt round-trip primitive — routes prompts to "
         .. "flow.llm_bound (strict / format) or alc.llm directly (non-check), "
@@ -741,6 +741,65 @@ function M.make_dispatcher(opts)
             return response or ""
         end,
     })
+end
+
+-- ─── resolve_task_dir helpers ───────────────────────────────────────
+
+local function _shell_quote(s)
+    return "'" .. s:gsub("'", "'\\''") .. "'"
+end
+
+local function _mkdir_p(path)
+    local cmd = "mkdir -p " .. _shell_quote(path)
+    local ok, _, code = os.execute(cmd)
+    if not ok or (type(code) == "number" and code ~= 0) then
+        return false, "mkdir failed with code " .. tostring(code)
+    end
+    return true, nil
+end
+
+--- Resolve (and create) the task working directory.
+---
+--- Priority for project_root:
+---   1. opts.project_root (explicit)
+---   2. ALC_PROJECT_ROOT env var
+---   3. PWD env var
+---   4. nil → returns nil, err_string
+---
+--- Final path:
+---   namespace absent: <project_root>/workspace/tasks/<task_id>
+---   namespace present: <project_root>/workspace/tasks/<namespace>/<task_id>
+---
+--- @param opts table {
+---     project_root : string?,          -- explicit override (highest priority)
+---     task_id      : string,           -- required
+---     namespace    : string?,          -- optional subdirectory under tasks/
+---     _env         : function(string)? -- test DI seam; defaults to os.getenv
+--- }
+--- @return string|nil abs_dir, string|nil err
+function M.resolve_task_dir(opts)
+    opts = opts or {}
+    local env = opts._env or os.getenv
+    local task_id = opts.task_id
+    if type(task_id) ~= "string" or task_id == "" then
+        error("swarm_frame_algocline.resolve_task_dir: task_id is required")
+    end
+    local project_root = opts.project_root
+    if not project_root then project_root = env("ALC_PROJECT_ROOT") end
+    if not project_root then project_root = env("PWD") end
+    if not project_root then
+        return nil,
+            "swarm_frame_algocline.resolve_task_dir: no project_root found in opts / ALC_PROJECT_ROOT / PWD"
+    end
+    local abs_dir
+    if opts.namespace and opts.namespace ~= "" then
+        abs_dir = project_root .. "/workspace/tasks/" .. opts.namespace .. "/" .. task_id
+    else
+        abs_dir = project_root .. "/workspace/tasks/" .. task_id
+    end
+    local ok, err = _mkdir_p(abs_dir)
+    if not ok then return nil, "swarm_frame_algocline.resolve_task_dir: " .. tostring(err) end
+    return abs_dir, nil
 end
 
 return M

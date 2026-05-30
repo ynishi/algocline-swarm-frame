@@ -10,12 +10,12 @@
 --- Schema-as-Data and the persistable-by-construction invariant are
 --- inherited from lshape. See design/design-doc.md for details.
 ---
---- Status: v0.6.0 (ctx-aware gate routing on top of Rich Verdict 2-layer). API surface is under
+--- Status: v0.7.0 (ctx-aware gate routing on top of Rich Verdict 2-layer). API surface is under
 --- verification through the bundled_base_curator_orch rewrite.
 
 local M = {}
 
-M.VERSION = "0.6.0"
+M.VERSION = "0.7.0"
 
 -- DI seam: inject a custom JSON host to override the auto-detect chain.
 -- Set to a table { encode = fn, decode = fn } before any JSON helper is
@@ -101,7 +101,7 @@ function M._reset_host_for_testing() M.host = nil end
 
 M.meta = {
     name = "swarm_frame",
-    version = "0.6.0",
+    version = "0.7.0",
     category = "frame",
     description = "Thin runtime for ProgramableSwarm — state container, "
         .. "session-key path registry, verdict parser, linear pipeline runner, "
@@ -808,5 +808,18 @@ M.plain_state = require("swarm_frame.plain_state")
 -- `design/normalize-primitive.md` for the discard re-evaluation rationale.
 
 M.normalize = require("swarm_frame.normalize")
+
+-- ─── artifact_store sub-module ────────────────────────────────────────────────
+--
+-- `swarm_frame.artifact_store(backend)`     — store factory
+-- `swarm_frame.backend_artifact_file(opts)` — FS backend (4-method contract)
+-- `swarm_frame.backend_artifact_memory()`   — in-memory backend (4-method contract)
+-- `swarm_frame.summarize(payload, opts)`    — standalone pure summary helper
+
+local _astore = require("swarm_frame.artifact_store")
+M.artifact_store = _astore.artifact_store
+M.backend_artifact_file = _astore.backend_artifact_file
+M.backend_artifact_memory = _astore.backend_artifact_memory
+M.summarize = _astore.summarize
 
 return M

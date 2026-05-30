@@ -62,7 +62,7 @@
 
 local M = {}
 
-M.VERSION = "0.6.0"
+M.VERSION = "0.7.0"
 
 --- Return true iff `name` appears anywhere in `completed_steps`.
 --- Linear scan; O(n) on the list length. The list is left untouched.

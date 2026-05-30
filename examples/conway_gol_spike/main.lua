@@ -19,10 +19,12 @@
 -- Run: lua examples/conway_gol_spike/main.lua
 
 local home = os.getenv("HOME") or ""
-package.path = home .. "/.algocline/packages/?/init.lua;"
-             .. home .. "/.algocline/packages/?.lua;"
-             .. "./packages/?/init.lua;./packages/?.lua;"
-             .. package.path
+package.path = home
+    .. "/.algocline/packages/?/init.lua;"
+    .. home
+    .. "/.algocline/packages/?.lua;"
+    .. "./packages/?/init.lua;./packages/?.lua;"
+    .. package.path
 
 local civic = require("civic")
 local st = civic.slot_table
@@ -46,9 +48,7 @@ local function neighbors(i)
         for dx = -1, 1 do
             if dx ~= 0 or dy ~= 0 then
                 local nx, ny = x + dx, y + dy
-                if nx >= 1 and nx <= W and ny >= 1 and ny <= H then
-                    out[#out + 1] = idx(nx, ny)
-                end
+                if nx >= 1 and nx <= W and ny >= 1 and ny <= H then out[#out + 1] = idx(nx, ny) end
             end
         end
     end
@@ -61,9 +61,7 @@ end
 -- Die: alive → dead otherwise (fallback)
 local rules = tr.new()
 rules:add("dead", "alive", function(_, ctx) return ctx.alive_neighbors == 3 end)
-rules:add("alive", "alive", function(_, ctx)
-    return ctx.alive_neighbors == 2 or ctx.alive_neighbors == 3
-end)
+rules:add("alive", "alive", function(_, ctx) return ctx.alive_neighbors == 2 or ctx.alive_neighbors == 3 end)
 rules:add("alive", "dead", function() return true end)
 
 -- ─── P1 5x5 grid + glider initial pattern ────────────────────────────
@@ -119,21 +117,23 @@ for gen = 1, GENS do
     for i, cell in cells:iter() do
         local nbrs = neighbors(i)
         local nbr_set = {}
-        for _, n in ipairs(nbrs) do nbr_set[n] = true end
-        local count = bus:aggregate_for(
-            i,
-            function(src) return nbr_set[src] == true end,
-            function(msgs)
-                local s = 0
-                for _, v in ipairs(msgs) do s = s + v end
-                return s
+        for _, n in ipairs(nbrs) do
+            nbr_set[n] = true
+        end
+        local count = bus:aggregate_for(i, function(src) return nbr_set[src] == true end, function(msgs)
+            local s = 0
+            for _, v in ipairs(msgs) do
+                s = s + v
             end
-        )
+            return s
+        end)
         next_payloads[i] = rules:apply(cell, { alive_neighbors = count })
     end
 
     -- apply
-    for i, payload in ipairs(next_payloads) do cells:set(i, payload) end
+    for i, payload in ipairs(next_payloads) do
+        cells:set(i, payload)
+    end
 
     print_grid(string.format("gen %d", gen))
 end
@@ -147,8 +147,16 @@ assert(initial_alive == 5, "glider initial alive count")
 -- persists for ~5 gens before clipping). Loose bound on purpose since
 -- exact frame depends on boundary handling.
 local final_alive = alive_count()
-assert(final_alive >= 0 and final_alive <= 5,
-    "alive_count out of [0,5] at gen " .. tostring(GENS) .. " (got " .. tostring(final_alive) .. ")")
+assert(
+    final_alive >= 0 and final_alive <= 5,
+    "alive_count out of [0,5] at gen " .. tostring(GENS) .. " (got " .. tostring(final_alive) .. ")"
+)
 
-print(string.format("[OK] conway_gol_spike completed (gens=%d initial_alive=%d final_alive=%d)",
-    GENS, initial_alive, final_alive))
+print(
+    string.format(
+        "[OK] conway_gol_spike completed (gens=%d initial_alive=%d final_alive=%d)",
+        GENS,
+        initial_alive,
+        final_alive
+    )
+)
