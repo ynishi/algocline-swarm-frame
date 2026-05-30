@@ -56,7 +56,7 @@
 
 local M = {}
 
-M.VERSION = "0.6.0"
+M.VERSION = "0.7.0"
 
 -- ── single-field coercers ──────────────────────────────────────────────
 -- Each coercer returns v iff type(v) matches the expected Lua type,
