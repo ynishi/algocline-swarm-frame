@@ -19,6 +19,29 @@
 
 - `packages/swarm_aggregate_plugin/init.lua` docstring: removed internal workspace path reference
 
+### Added — swarm_frame (v0.7.0 artifact_store)
+
+- `swarm_frame.artifact_store(backend)` — store factory with `:offload(payload, {name, task_dir, format}) → (abs_path, err)`
+- `swarm_frame.backend_artifact_file([opts])` — default FS backend (4-method: write/read/exists/delete)
+- `swarm_frame.backend_artifact_memory()` — in-memory backend, test 用
+- `swarm_frame.summarize(payload, {format, max_chars})` — standalone pure helper, format=text/json
+
+### Added — swarm_frame_algocline (v0.1.2)
+
+- `swarm_frame_algocline.resolve_task_dir({project_root, task_id, namespace?})` — task_dir resolver with ctx → ALC_PROJECT_ROOT → PWD priority
+
+### Bumped
+
+- `swarm_frame` v0.6.0 → v0.7.0 (minor additive)
+- `swarm_frame.plain_state.VERSION` 同 (sub-module 揃え)
+- `swarm_frame.normalize.VERSION` 同 (sub-module 揃え)
+- `swarm_frame_algocline` v0.1.1 → v0.1.2 (additive)
+
+### Internal
+
+- spec: `packages/swarm_frame/spec/artifact_store_spec.lua` (backend contract test for memory + FS, artifact_store.offload, summarize standalone)
+- spec: `packages/swarm_frame_algocline/spec/resolve_task_dir_spec.lua` (env DI 3-path coverage)
+
 ## v0.6.0 (YYYY-MM-DD, additive)
 
 ### Added — swarm_frame
