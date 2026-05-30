@@ -63,15 +63,22 @@ the copy-paste sites disappear by construction, not by guideline.
 algocline-swarm-frame/
 ├── packages/
 │   ├── swarm_frame/
-│   │   ├── init.lua          -- frame core
-│   │   ├── normalize.lua     -- normalize_ctx primitive
-│   │   └── plain_state.lua   -- State container
+│   │   ├── init.lua              -- frame core
+│   │   ├── normalize.lua         -- normalize_ctx primitive
+│   │   ├── plain_state.lua       -- State container
+│   │   ├── artifact_store.lua    -- artifact store + backends + summarize
+│   │   └── spec/
+│   │       ├── init_spec.lua
+│   │       ├── plain_state_spec.lua
+│   │       └── artifact_store_spec.lua
 │   └── swarm_frame_algocline/
-│       └── init.lua          -- algocline adapter (Token & Prompt)
+│       ├── init.lua              -- algocline adapter (Token, Prompt, resolve_task_dir)
+│       └── spec/
+│           └── resolve_task_dir_spec.lua
 ├── examples/
 │   └── bundled_base_curator/ -- 6-step pipeline reference impl
 ├── tests/
-│   └── run.lua               -- Lua test suite (193 cases)
+│   └── run.lua               -- Lua test suite (236 cases)
 ├── justfile
 ├── LICENSE-MIT / LICENSE-APACHE
 └── README.md
@@ -94,7 +101,7 @@ symlink** onto algocline's package search path
 git clone https://github.com/ynishi/algocline-swarm-frame.git
 cd algocline-swarm-frame
 
-# Run the test suite (193 cases, Pure Lua — no algocline required)
+# Run the test suite (236 cases, Pure Lua — no algocline required)
 just test
 
 # Link the two packages onto algocline's search path. The packages/
@@ -125,13 +132,41 @@ and `alc_pkg_link` the `packages/` directory as shown in "Setup".
 
 ## Status
 
-v0.6.0. Frame core (`swarm_frame` v0.6.0) with ctx-aware gate routing
-on top of Rich Verdict 2-layer separation. Token & Prompt round-trip
-primitive (`swarm_frame_algocline` v0.1.1), and Swarm aggregate plugin
-(`swarm_aggregate_plugin` v0.1.0) bridging multi-agent debate (dmad
-/ Du 2023) onto the dispatcher. Lua tests + mock smoke + real-LLM
-e2e (agent-block) all passing. Hub `hub_index.json` (3 entries) for
-`alc init` / `alc_hub_search` consumption.
+v0.7.0. Frame core (`swarm_frame` v0.7.0) with artifact store,
+ctx-aware gate routing, and Rich Verdict 2-layer separation.
+Token, Prompt, and task-dir resolver (`swarm_frame_algocline` v0.1.2).
+Swarm aggregate plugin (`swarm_aggregate_plugin` v0.1.0) bridging
+multi-agent debate (dmad / Du 2023) onto the dispatcher. Lua tests
+(236 cases) + mock smoke + real-LLM e2e (agent-block) all passing.
+Hub `hub_index.json` (3 entries) for `alc init` / `alc_hub_search`
+consumption.
+
+### Artifact store (v0.7.0)
+
+`swarm_frame.artifact_store` provides a backend-agnostic store for
+offloading agent payloads (text or JSON) to disk or memory during a
+run. The interface is a 4-method contract (write / read / exists /
+delete) that backends implement without any knowledge of format or
+encoding; all payload-to-bytes conversion is scoped to
+`artifact_store:offload`.
+
+New surface:
+- `swarm_frame.artifact_store(backend)` — store factory.
+  `:offload(payload, {name, task_dir, format})` converts payload to
+  bytes (`format="text"` via `tostring`, `format="json"` via
+  `alc.json.encode`) and delegates raw bytes to the backend.
+  Returns `abs_path, nil` on success or `nil, err` on failure.
+- `swarm_frame.backend_artifact_file([opts])` — filesystem backend;
+  joins `task_dir .. "/" .. rel_path`. No format logic inside.
+- `swarm_frame.backend_artifact_memory()` — in-memory backend for
+  tests; same 4-method contract, zero filesystem I/O.
+- `swarm_frame.summarize(payload, {format, max_chars})` — standalone
+  pure helper. No dependency on artifact_store or any backend;
+  callable without instantiating a store.
+- `swarm_frame_algocline.resolve_task_dir({project_root, task_id,
+  namespace?})` — resolves the task workspace directory with a
+  3-step priority: `ctx.project_root` → `ALC_PROJECT_ROOT` →
+  `PWD`. Accepts an optional `_env` injector for test isolation.
 
 ### Rich Verdict 2-layer separation (v0.5.0)
 
