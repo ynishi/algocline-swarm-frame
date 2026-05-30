@@ -35,15 +35,15 @@
 --- (`before_dispatch` / `around_dispatch` / `after_dispatch` /
 --- `finalize`) for callers to layer the rest on top.
 ---
---- Status: v0.1.2 (Token & Prompt + format mode).
+--- Status: v0.2.0 (Token & Prompt + format mode + resolve_task_dir).
 
 local M = {}
 
-M.VERSION = "0.1.2"
+M.VERSION = "0.2.0"
 
 M.meta = {
     name = "swarm_frame_algocline",
-    version = "0.1.2",
+    version = "0.2.0",
     category = "frame_primitive",
     description = "Token & Prompt round-trip primitive — routes prompts to "
         .. "flow.llm_bound (strict / format) or alc.llm directly (non-check), "

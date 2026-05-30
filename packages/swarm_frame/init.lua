@@ -10,12 +10,12 @@
 --- Schema-as-Data and the persistable-by-construction invariant are
 --- inherited from lshape. See design/design-doc.md for details.
 ---
---- Status: v0.7.0 (ctx-aware gate routing on top of Rich Verdict 2-layer). API surface is under
+--- Status: v0.8.0 (artifact_store + 4-method backend + summarize on top of v0.7.0). API surface is under
 --- verification through the bundled_base_curator_orch rewrite.
 
 local M = {}
 
-M.VERSION = "0.7.0"
+M.VERSION = "0.8.0"
 
 -- DI seam: inject a custom JSON host to override the auto-detect chain.
 -- Set to a table { encode = fn, decode = fn } before any JSON helper is
@@ -101,7 +101,7 @@ function M._reset_host_for_testing() M.host = nil end
 
 M.meta = {
     name = "swarm_frame",
-    version = "0.7.0",
+    version = "0.8.0",
     category = "frame",
     description = "Thin runtime for ProgramableSwarm — state container, "
         .. "session-key path registry, verdict parser, linear pipeline runner, "

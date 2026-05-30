@@ -132,16 +132,16 @@ and `alc_pkg_link` the `packages/` directory as shown in "Setup".
 
 ## Status
 
-v0.7.0. Frame core (`swarm_frame` v0.7.0) with artifact store,
+v0.8.0. Frame core (`swarm_frame` v0.8.0) with artifact store,
 ctx-aware gate routing, and Rich Verdict 2-layer separation.
-Token, Prompt, and task-dir resolver (`swarm_frame_algocline` v0.1.2).
+Token, Prompt, and task-dir resolver (`swarm_frame_algocline` v0.2.0).
 Swarm aggregate plugin (`swarm_aggregate_plugin` v0.1.0) bridging
 multi-agent debate (dmad / Du 2023) onto the dispatcher. Lua tests
-(236 cases) + mock smoke + real-LLM e2e (agent-block) all passing.
+(319 cases) + mock smoke + real-LLM e2e (agent-block) all passing.
 Hub `hub_index.json` (3 entries) for `alc init` / `alc_hub_search`
 consumption.
 
-### Artifact store (v0.7.0)
+### Artifact store (v0.8.0)
 
 `swarm_frame.artifact_store` provides a backend-agnostic store for
 offloading agent payloads (text or JSON) to disk or memory during a
