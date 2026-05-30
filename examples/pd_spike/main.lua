@@ -21,10 +21,12 @@
 -- Run: lua examples/pd_spike/main.lua
 
 local home = os.getenv("HOME") or ""
-package.path = home .. "/.algocline/packages/?/init.lua;"
-             .. home .. "/.algocline/packages/?.lua;"
-             .. "./packages/?/init.lua;./packages/?.lua;"
-             .. package.path
+package.path = home
+    .. "/.algocline/packages/?/init.lua;"
+    .. home
+    .. "/.algocline/packages/?.lua;"
+    .. "./packages/?/init.lua;./packages/?.lua;"
+    .. package.path
 
 local civic = require("civic")
 local st = civic.slot_table
@@ -36,7 +38,7 @@ local N = 8
 local GENS = 5
 local ROUNDS_PER_GEN = 10
 local ELITE = 3
-local DECAY = 0.5      -- 50% carry-over of payoff into next generation
+local DECAY = 0.5 -- 50% carry-over of payoff into next generation
 
 math.randomseed(2026)
 
@@ -51,9 +53,7 @@ end
 local function choose(rate) return math.random() < rate end
 
 -- P1
-local pop = st.new(N, function()
-    return { coop_rate = math.random(), state = "active" }
-end)
+local pop = st.new(N, function() return { coop_rate = math.random(), state = "active" } end)
 
 -- P2 scalar_pool
 local pool = sp.new()
@@ -74,7 +74,9 @@ rules:add("active", "eliminated", function() return true end)
 
 local function copy_payload(p)
     local c = {}
-    for k, v in pairs(p) do c[k] = v end
+    for k, v in pairs(p) do
+        c[k] = v
+    end
     return c
 end
 
@@ -107,14 +109,16 @@ for gen = 1, GENS do
     end
 
     local mean = 0
-    for _, o in ipairs(order) do mean = mean + o.f end
+    for _, o in ipairs(order) do
+        mean = mean + o.f
+    end
     mean = mean / N
     local mean_coop = 0
-    for _, p in pop:iter() do mean_coop = mean_coop + p.coop_rate end
+    for _, p in pop:iter() do
+        mean_coop = mean_coop + p.coop_rate
+    end
     mean_coop = mean_coop / N
-    print(string.format(
-        "gen %d: best=%.1f mean_payoff=%.1f mean_coop=%.3f",
-        gen, order[1].f, mean, mean_coop))
+    print(string.format("gen %d: best=%.1f mean_payoff=%.1f mean_coop=%.3f", gen, order[1].f, mean, mean_coop))
 
     -- P7 apply
     for i, p in pop:iter() do
@@ -130,7 +134,7 @@ for gen = 1, GENS do
             local parent_p = pop:get(parent_idx)
             local child_p = lineage:beget(parent_idx, i, gen, parent_p)
             pop:set(i, child_p)
-            pool:reset(i)  -- new lifetime, payoff history cleared
+            pool:reset(i) -- new lifetime, payoff history cleared
         end
     end
 
@@ -150,18 +154,19 @@ for _, slot in ipairs(pool:slots()) do
     total_pool = total_pool + t
     if t > 0 then n_slots_with_payoff = n_slots_with_payoff + 1 end
 end
-assert(total_pool > 0,
-    "scalar_pool empty — tournament payoffs did not accumulate")
-assert(n_slots_with_payoff >= ELITE,
-    string.format("only %d slots have payoff (expected >= %d elites)",
-        n_slots_with_payoff, ELITE))
+assert(total_pool > 0, "scalar_pool empty — tournament payoffs did not accumulate")
+assert(
+    n_slots_with_payoff >= ELITE,
+    string.format("only %d slots have payoff (expected >= %d elites)", n_slots_with_payoff, ELITE)
+)
 
 -- P2 by_source: only "tournament" was used; verify it equals total per slot
 for _, slot in ipairs(pool:slots()) do
     local by_src = pool:by_source(slot, "tournament")
-    assert(math.abs(by_src - pool:total(slot)) < 1e-9,
-        string.format("by_source/total mismatch on slot %d: %s vs %s",
-            slot, by_src, pool:total(slot)))
+    assert(
+        math.abs(by_src - pool:total(slot)) < 1e-9,
+        string.format("by_source/total mismatch on slot %d: %s vs %s", slot, by_src, pool:total(slot))
+    )
 end
 
 -- P4 lineage was exercised
@@ -169,9 +174,19 @@ assert(lineage:size() > 0, "lineage edges empty")
 
 -- final summary
 local mean_coop = 0
-for _, p in pop:iter() do mean_coop = mean_coop + p.coop_rate end
+for _, p in pop:iter() do
+    mean_coop = mean_coop + p.coop_rate
+end
 mean_coop = mean_coop / N
 
-print(string.format(
-    "[OK] pd_spike completed (gens=%d N=%d rounds=%d edges=%d pool_total=%.1f mean_coop=%.3f)",
-    GENS, N, ROUNDS_PER_GEN, lineage:size(), total_pool, mean_coop))
+print(
+    string.format(
+        "[OK] pd_spike completed (gens=%d N=%d rounds=%d edges=%d pool_total=%.1f mean_coop=%.3f)",
+        GENS,
+        N,
+        ROUNDS_PER_GEN,
+        lineage:size(),
+        total_pool,
+        mean_coop
+    )
+)

@@ -809,4 +809,17 @@ M.plain_state = require("swarm_frame.plain_state")
 
 M.normalize = require("swarm_frame.normalize")
 
+-- ─── artifact_store sub-module ────────────────────────────────────────────────
+--
+-- `swarm_frame.artifact_store(backend)`     — store factory
+-- `swarm_frame.backend_artifact_file(opts)` — FS backend (4-method contract)
+-- `swarm_frame.backend_artifact_memory()`   — in-memory backend (4-method contract)
+-- `swarm_frame.summarize(payload, opts)`    — standalone pure summary helper
+
+local _astore = require("swarm_frame.artifact_store")
+M.artifact_store = _astore.artifact_store
+M.backend_artifact_file = _astore.backend_artifact_file
+M.backend_artifact_memory = _astore.backend_artifact_memory
+M.summarize = _astore.summarize
+
 return M

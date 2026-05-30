@@ -2526,15 +2526,13 @@ describe("broadcast_bus (P6 Primitive spike)", function()
         bus:publish(1, 1)
         bus:publish(2, 1)
         bus:publish(3, 1)
-        local r = bus:aggregate_for(
-            10,
-            function(src) return src == 1 or src == 3 end,
-            function(msgs)
-                local s = 0
-                for _, v in ipairs(msgs) do s = s + v end
-                return s
+        local r = bus:aggregate_for(10, function(src) return src == 1 or src == 3 end, function(msgs)
+            local s = 0
+            for _, v in ipairs(msgs) do
+                s = s + v
             end
-        )
+            return s
+        end)
         expect(r).to.equal(2)
     end)
 
@@ -2568,8 +2566,12 @@ describe("broadcast_bus (P6 Primitive spike)", function()
 
     it("aggregate_for() rejects non-function selector / agg", function()
         local bus = bb.new()
-        expect(pcall(function() bus:aggregate_for(1, "no", function() end) end)).to.equal(false)
-        expect(pcall(function() bus:aggregate_for(1, function() end, "no") end)).to.equal(false)
+        expect(pcall(function()
+            bus:aggregate_for(1, "no", function() end)
+        end)).to.equal(false)
+        expect(pcall(function()
+            bus:aggregate_for(1, function() end, "no")
+        end)).to.equal(false)
     end)
 end)
 
@@ -2577,9 +2579,7 @@ describe("transition_rules (P7 Primitive spike)", function()
     it("Conway B3/S23 encodes in 3 add() calls; first match wins", function()
         local rules = tr.new()
         rules:add("dead", "alive", function(_, c) return c.alive_neighbors == 3 end)
-        rules:add("alive", "alive", function(_, c)
-            return c.alive_neighbors == 2 or c.alive_neighbors == 3
-        end)
+        rules:add("alive", "alive", function(_, c) return c.alive_neighbors == 2 or c.alive_neighbors == 3 end)
         rules:add("alive", "dead", function() return true end)
         expect(rules:size()).to.equal(3)
 
@@ -2631,9 +2631,15 @@ describe("transition_rules (P7 Primitive spike)", function()
 
     it("add() rejects empty / non-string from/to", function()
         local rules = tr.new()
-        expect(pcall(function() rules:add("", "x", function() end) end)).to.equal(false)
-        expect(pcall(function() rules:add("x", "", function() end) end)).to.equal(false)
-        expect(pcall(function() rules:add(nil, "x", function() end) end)).to.equal(false)
+        expect(pcall(function()
+            rules:add("", "x", function() end)
+        end)).to.equal(false)
+        expect(pcall(function()
+            rules:add("x", "", function() end)
+        end)).to.equal(false)
+        expect(pcall(function()
+            rules:add(nil, "x", function() end)
+        end)).to.equal(false)
     end)
 
     it("apply() rejects payload without string state", function()
@@ -2710,7 +2716,7 @@ describe("lineage (P4 Primitive + Q1 mutation_op subordinate)", function()
         L:beget(1, 2, 0, {})
         local e1 = L:edges()
         e1[#e1 + 1] = { parent = 99, child = 99, gen = 99 }
-        expect(L:size()).to.equal(1)  -- unaffected by external mutation
+        expect(L:size()).to.equal(1) -- unaffected by external mutation
         local kids = L:children(1)
         kids[#kids + 1] = 999
         expect(#L:children(1)).to.equal(1)
@@ -2782,7 +2788,7 @@ describe("ledger (P3 Primitive spike)", function()
         expect(ok).to.equal(true)
         expect(L:balance(1)).to.equal(-40)
         expect(L:balance(2)).to.equal(50)
-        expect(L:total()).to.equal(L:credit_total())  -- still conserved
+        expect(L:total()).to.equal(L:credit_total()) -- still conserved
     end)
 
     it("transfer() to self errors", function()
@@ -2813,7 +2819,7 @@ describe("ledger (P3 Primitive spike)", function()
         local txs = L:transactions()
         expect(#txs).to.equal(2)
         txs[#txs + 1] = { kind = "fake" }
-        expect(L:size()).to.equal(2)  -- internal log unaffected
+        expect(L:size()).to.equal(2) -- internal log unaffected
     end)
 
     it("transactions() logs credit and transfer kinds correctly", function()
@@ -2847,7 +2853,7 @@ describe("scalar_pool (P2 Primitive spike)", function()
         local P = sp_pool.new()
         P:credit(1, "peer", 5)
         P:credit(1, "market", 3)
-        P:credit(1, "peer", 2)  -- accumulates with existing peer bucket
+        P:credit(1, "peer", 2) -- accumulates with existing peer bucket
         expect(P:by_source(1, "peer")).to.equal(7)
         expect(P:by_source(1, "market")).to.equal(3)
         expect(P:total(1)).to.equal(10)
@@ -2941,27 +2947,21 @@ describe("knowledge_channel (P5 Primitive spike)", function()
 
     it("transfer() forwards ctx to transform_fn", function()
         local K = kc.new()
-        K:set_transform(function(payload, ctx)
-            return { v = payload.v, gen = ctx and ctx.gen or -1 }
-        end)
+        K:set_transform(function(payload, ctx) return { v = payload.v, gen = ctx and ctx.gen or -1 } end)
         local out = K:transfer(1, 2, { v = 0 }, { gen = 7 })
         expect(out.gen).to.equal(7)
     end)
 
     it("transfer() works without ctx (ctx = nil)", function()
         local K = kc.new()
-        K:set_transform(function(payload, ctx)
-            return { v = payload.v, has_ctx = ctx ~= nil }
-        end)
+        K:set_transform(function(payload, ctx) return { v = payload.v, has_ctx = ctx ~= nil } end)
         local out = K:transfer(1, 2, { v = 1 })
         expect(out.has_ctx).to.equal(false)
     end)
 
     it("transfer() supports schema reshape (transform may add / drop fields)", function()
         local K = kc.new()
-        K:set_transform(function(payload)
-            return { sum = (payload.a or 0) + (payload.b or 0) }
-        end)
+        K:set_transform(function(payload) return { sum = (payload.a or 0) + (payload.b or 0) } end)
         local out = K:transfer(1, 2, { a = 3, b = 4, c = "drop" })
         expect(out.sum).to.equal(7)
         expect(out.a).to.equal(nil)
@@ -3001,6 +3001,8 @@ describe("knowledge_channel (P5 Primitive spike)", function()
         expect(K:size()).to.equal(1)
     end)
 end)
+
+dofile("packages/swarm_frame/spec/artifact_store_spec.lua")
 
 -- Final exit code: non-zero on failure
 local results = lust.get_results()

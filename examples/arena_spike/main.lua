@@ -27,10 +27,12 @@
 -- Run: lua examples/arena_spike/main.lua
 
 local home = os.getenv("HOME") or ""
-package.path = home .. "/.algocline/packages/?/init.lua;"
-             .. home .. "/.algocline/packages/?.lua;"
-             .. "./packages/?/init.lua;./packages/?.lua;"
-             .. package.path
+package.path = home
+    .. "/.algocline/packages/?/init.lua;"
+    .. home
+    .. "/.algocline/packages/?.lua;"
+    .. "./packages/?/init.lua;./packages/?.lua;"
+    .. package.path
 
 local civic = require("civic")
 local st = civic.slot_table
@@ -48,15 +50,18 @@ local ELITE = 3
 math.randomseed(2026)
 
 -- P1
-local pop = st.new(N, function()
-    return {
-        boldness = math.random(),
-        finesse = math.random(),
-        harmony = math.random(),
-        record = { wins = 0, losses = 0, top_styles = {}, gen_born = 0 },
-        state = "active",
-    }
-end)
+local pop = st.new(
+    N,
+    function()
+        return {
+            boldness = math.random(),
+            finesse = math.random(),
+            harmony = math.random(),
+            record = { wins = 0, losses = 0, top_styles = {}, gen_born = 0 },
+            state = "active",
+        }
+    end
+)
 
 -- P2 scalar_pool (vote tally)
 local pool = sp.new()
@@ -75,7 +80,7 @@ lineage:set_mutation_op(function(parent_p)
         boldness = jitter(parent_p.boldness),
         finesse = jitter(parent_p.finesse),
         harmony = jitter(parent_p.harmony),
-        record = nil,  -- filled by P5 transform after beget
+        record = nil, -- filled by P5 transform after beget
         state = "active",
     }
 end)
@@ -106,15 +111,17 @@ rules:add("active", "eliminated", function() return true end)
 
 local function copy_payload(p)
     local c = {}
-    for k, v in pairs(p) do c[k] = v end
+    for k, v in pairs(p) do
+        c[k] = v
+    end
     return c
 end
 
 local function similarity(a, b)
     -- homophily: closer vectors -> higher voter-candidate fit
-    return 1.0 - (math.abs(a.boldness - b.boldness)
-        + math.abs(a.finesse - b.finesse)
-        + math.abs(a.harmony - b.harmony)) / 3.0
+    return 1.0
+        - (math.abs(a.boldness - b.boldness) + math.abs(a.finesse - b.finesse) + math.abs(a.harmony - b.harmony))
+            / 3.0
 end
 
 for gen = 1, GENS do
@@ -129,7 +136,9 @@ for gen = 1, GENS do
                 for j, cand in pop:iter() do
                     if j ~= i and cand.state == "active" then
                         local s = similarity(voter, cand) + (math.random() - 0.5) * 0.05
-                        if s > best_s then best_j, best_s = j, s end
+                        if s > best_s then
+                            best_j, best_s = j, s
+                        end
                     end
                 end
                 if best_j then bus:publish(i, best_j) end
@@ -141,7 +150,7 @@ for gen = 1, GENS do
             if pop:get(j).state == "active" then
                 local votes = bus:aggregate_for(
                     j,
-                    function(src) return src ~= j end,  -- exclude self
+                    function(src) return src ~= j end, -- exclude self
                     function(msgs)
                         local count = 0
                         for _, m in ipairs(msgs) do
@@ -157,7 +166,9 @@ for gen = 1, GENS do
 
     -- elite selection by total votes
     local order = {}
-    for i = 1, N do order[#order + 1] = { i = i, f = pool:total(i) } end
+    for i = 1, N do
+        order[#order + 1] = { i = i, f = pool:total(i) }
+    end
     table.sort(order, function(a, b) return a.f > b.f end)
     local elite_set, elite_list = {}, {}
     for k = 1, ELITE do
@@ -172,8 +183,12 @@ for gen = 1, GENS do
             p.record.wins = p.record.wins + 1
             -- biggest axis becomes the recorded "top style"
             local biggest, biggest_axis = p.boldness, "boldness"
-            if p.finesse > biggest then biggest, biggest_axis = p.finesse, "finesse" end
-            if p.harmony > biggest then biggest, biggest_axis = p.harmony, "harmony" end
+            if p.finesse > biggest then
+                biggest, biggest_axis = p.finesse, "finesse"
+            end
+            if p.harmony > biggest then
+                biggest, biggest_axis = p.harmony, "harmony"
+            end
             table.insert(p.record.top_styles, biggest_axis)
         else
             p.record.losses = p.record.losses + 1
@@ -181,7 +196,9 @@ for gen = 1, GENS do
     end
 
     local mean = 0
-    for _, o in ipairs(order) do mean = mean + o.f end
+    for _, o in ipairs(order) do
+        mean = mean + o.f
+    end
     mean = mean / N
     print(string.format("gen %d: best_votes=%.1f mean_votes=%.1f", gen, order[1].f, mean))
 
@@ -219,27 +236,36 @@ local history = k_channel:history()
 local last = history[#history]
 local child = pop:get(last.successor)
 -- wins/losses must be 0 (transform reset semantic)
-assert(child.record.wins == 0,
-    string.format("P5 transform: wins=%d on successor=%d (expected 0)",
-        child.record.wins, last.successor))
-assert(child.record.losses == 0,
-    string.format("P5 transform: losses=%d on successor=%d (expected 0)",
-        child.record.losses, last.successor))
-assert(type(child.record.top_styles) == "table",
-    "P5 transform: top_styles must be table")
-assert(type(child.record.ancestor_wins) == "number",
-    "P5 transform: ancestor_wins (schema reshape) must be number")
-assert(type(child.record.gen_born) == "number",
-    "P5 transform: gen_born (ctx pickup) must be number")
+assert(
+    child.record.wins == 0,
+    string.format("P5 transform: wins=%d on successor=%d (expected 0)", child.record.wins, last.successor)
+)
+assert(
+    child.record.losses == 0,
+    string.format("P5 transform: losses=%d on successor=%d (expected 0)", child.record.losses, last.successor)
+)
+assert(type(child.record.top_styles) == "table", "P5 transform: top_styles must be table")
+assert(type(child.record.ancestor_wins) == "number", "P5 transform: ancestor_wins (schema reshape) must be number")
+assert(type(child.record.gen_born) == "number", "P5 transform: gen_born (ctx pickup) must be number")
 
 -- P6 was exercised
 local pool_total = 0
-for _, slot in ipairs(pool:slots()) do pool_total = pool_total + pool:total(slot) end
+for _, slot in ipairs(pool:slots()) do
+    pool_total = pool_total + pool:total(slot)
+end
 assert(pool_total > 0, "scalar_pool empty (no votes accumulated?)")
 
 -- P4 was exercised
 assert(lineage:size() > 0, "lineage edges empty")
 
-print(string.format(
-    "[OK] arena_spike completed (gens=%d N=%d rounds=%d edges=%d transfers=%d pool=%.1f)",
-    GENS, N, ROUNDS_PER_GEN, lineage:size(), k_size, pool_total))
+print(
+    string.format(
+        "[OK] arena_spike completed (gens=%d N=%d rounds=%d edges=%d transfers=%d pool=%.1f)",
+        GENS,
+        N,
+        ROUNDS_PER_GEN,
+        lineage:size(),
+        k_size,
+        pool_total
+    )
+)

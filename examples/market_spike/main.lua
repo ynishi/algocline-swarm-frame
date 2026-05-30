@@ -19,10 +19,12 @@
 -- Run: lua examples/market_spike/main.lua
 
 local home = os.getenv("HOME") or ""
-package.path = home .. "/.algocline/packages/?/init.lua;"
-             .. home .. "/.algocline/packages/?.lua;"
-             .. "./packages/?/init.lua;./packages/?.lua;"
-             .. package.path
+package.path = home
+    .. "/.algocline/packages/?/init.lua;"
+    .. home
+    .. "/.algocline/packages/?.lua;"
+    .. "./packages/?/init.lua;./packages/?.lua;"
+    .. package.path
 
 local civic = require("civic")
 local st = civic.slot_table
@@ -49,7 +51,9 @@ local L = lg.new()
 local traders = st.new(N, function(i) return { id = i, state = "active" } end)
 
 -- seed credit
-for i = 1, N do L:credit(i, INITIAL) end
+for i = 1, N do
+    L:credit(i, INITIAL)
+end
 assert(L:total() == N * INITIAL, "initial seed total mismatch")
 assert(L:credit_total() == N * INITIAL, "initial credit_total mismatch")
 
@@ -62,7 +66,9 @@ rules:add("bankrupt", "active", function(_, ctx) return ctx.balance >= BANKRUPT_
 
 local function copy_payload(p)
     local c = {}
-    for k, v in pairs(p) do c[k] = v end
+    for k, v in pairs(p) do
+        c[k] = v
+    end
     return c
 end
 
@@ -82,7 +88,9 @@ for round = 1, ROUNDS do
     for i, p in traders:iter() do
         if p.state == "active" then
             local partner = math.random(1, N)
-            while partner == i do partner = math.random(1, N) end
+            while partner == i do
+                partner = math.random(1, N)
+            end
             local amount = math.random(1, TRANSFER_MAX)
             local ok = L:transfer(i, partner, amount)
             if not ok then rejected = rejected + 1 end
@@ -91,12 +99,12 @@ for round = 1, ROUNDS do
 
     -- 3. P7 apply (end of transfer): active(balance<=0) -> bankrupt
     local before_states = {}
-    for i, p in traders:iter() do before_states[i] = p.state end
+    for i, p in traders:iter() do
+        before_states[i] = p.state
+    end
     apply_p7()
     for i, p in traders:iter() do
-        if before_states[i] == "active" and p.state == "bankrupt" then
-            bankrupt_events = bankrupt_events + 1
-        end
+        if before_states[i] == "active" and p.state == "bankrupt" then bankrupt_events = bankrupt_events + 1 end
     end
 
     -- 4. reentry credit: bankrupt slots receive REENTRY external inflow
@@ -116,23 +124,37 @@ for _, p in traders:iter() do
     if p.state == "bankrupt" then bankrupt_now = bankrupt_now + 1 end
 end
 
-print(string.format("rounds=%d traders=%d initial=%d transfer_max=%d reentry=%d",
-    ROUNDS, N, INITIAL, TRANSFER_MAX, REENTRY))
-print(string.format("  rejected_txs=%d bankrupt_events=%d reentries=%d",
-    rejected, bankrupt_events, reentries))
+print(
+    string.format(
+        "rounds=%d traders=%d initial=%d transfer_max=%d reentry=%d",
+        ROUNDS,
+        N,
+        INITIAL,
+        TRANSFER_MAX,
+        REENTRY
+    )
+)
+print(string.format("  rejected_txs=%d bankrupt_events=%d reentries=%d", rejected, bankrupt_events, reentries))
 print(string.format("  final_active=%d final_bankrupt=%d", active, bankrupt_now))
 
 -- ─── conservation verify (P3 ledger invariant) ───────────────────────
 -- total() must equal credit_total() because transfer is zero-sum.
 local expected_credit = N * INITIAL + reentries * REENTRY
-assert(L:credit_total() == expected_credit,
-    string.format("credit_total mismatch: got=%d expected=%d",
-        L:credit_total(), expected_credit))
+assert(
+    L:credit_total() == expected_credit,
+    string.format("credit_total mismatch: got=%d expected=%d", L:credit_total(), expected_credit)
+)
 
 local total_bal = L:total()
-assert(total_bal == L:credit_total(),
-    string.format("ledger conservation violated: total_bal=%d credit_total=%d (diff=%d)",
-        total_bal, L:credit_total(), total_bal - L:credit_total()))
+assert(
+    total_bal == L:credit_total(),
+    string.format(
+        "ledger conservation violated: total_bal=%d credit_total=%d (diff=%d)",
+        total_bal,
+        L:credit_total(),
+        total_bal - L:credit_total()
+    )
+)
 
 -- transaction log non-empty
 assert(L:size() > 0, "transaction log empty")
@@ -140,10 +162,8 @@ assert(L:size() > 0, "transaction log empty")
 -- bankrupt events and reentries must have occurred — that is the core
 -- of W13 (transition_rules (b) double-headed verify on the market
 -- domain).
-assert(bankrupt_events > 0,
-    "no bankrupt events — spike did not exercise active->bankrupt transition")
-assert(reentries > 0,
-    "no reentries — spike did not exercise bankrupt->active reentry transition (b)")
+assert(bankrupt_events > 0, "no bankrupt events — spike did not exercise active->bankrupt transition")
+assert(reentries > 0, "no reentries — spike did not exercise bankrupt->active reentry transition (b)")
 
 -- NOTE: `rejected_txs` may legitimately be 0 here. When P7 fires
 -- active->bankrupt the moment balance < BANKRUPT_THRESHOLD, bankrupt
@@ -154,6 +174,11 @@ assert(reentries > 0,
 -- The ledger's reject path is covered by ledger spec tests directly
 -- (tests/run.lua "transfer() returns false on insufficient funds").
 
-print(string.format(
-    "[OK] market_spike completed (conservation PASS: total=%d == credit_total=%d, txs=%d)",
-    total_bal, L:credit_total(), L:size()))
+print(
+    string.format(
+        "[OK] market_spike completed (conservation PASS: total=%d == credit_total=%d, txs=%d)",
+        total_bal,
+        L:credit_total(),
+        L:size()
+    )
+)
