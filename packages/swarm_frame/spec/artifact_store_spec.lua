@@ -1,4 +1,5 @@
 -- Usage: mcp__algocline__alc_pkg_test pkg=swarm_frame
+local lust = require("lust")
 local sf = require("swarm_frame")
 local describe, it, expect = lust.describe, lust.it, lust.expect
 

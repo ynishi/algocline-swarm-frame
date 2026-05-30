@@ -2,7 +2,7 @@
 --
 -- DSL 規約: lust global は alc_pkg_test runner が auto-inject する。
 -- package.path 手動設定禁止 (§8-7-36)。
-
+local lust = require("lust")
 local sfa = require("swarm_frame_algocline")
 local describe, it, expect = lust.describe, lust.it, lust.expect
 
