@@ -1503,7 +1503,7 @@ describe("normalize: entry-boundary type coercion", function()
         expect(type(frame.normalize.coerce_number)).to.equal("function")
         expect(type(frame.normalize.coerce_table)).to.equal("function")
         expect(type(frame.normalize.normalize_ctx)).to.equal("function")
-        expect(frame.normalize.VERSION).to.equal("0.8.0")
+        expect(frame.normalize.VERSION).to.equal("0.9.0")
     end)
 
     -- single-field coercers

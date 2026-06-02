@@ -1,7 +1,22 @@
 {
   "schema_version": "hub_index/v0",
-  "updated_at": "2026-05-30T23:17:37Z",
+  "updated_at": "2026-06-02T09:14:11Z",
   "packages": [
+    {
+      "name": "combinator_demo",
+      "version": "0.1.0",
+      "description": "Minimal verdict_loop demo: ask LLM for \\\\boxed{N}, retry on missing marker.",
+      "category": "frame_example",
+      "docstring": "combinator_demo — minimal verdict_loop demo for swarm_frame.\n\nA 1-pkg illustration of `swarm_frame.verdict_loop`: ask the LLM to\nanswer a task, retry when the response does not contain a\n`\\boxed{...}` marker. The parser is the only domain-aware piece\n(Application policy); iteration and short-circuit live in the\nEngine (mechanism).\n\nWhy a separate pkg: combinators are mechanism primitives, so the\nusage shape is best demonstrated by a tiny consumer rather than\nbaked into a heavier algorithm pkg. Run paths:\n\njust combinator-demo                # smoke (mock alc.llm)\njust e2e combinator_demo            # real LLM via agent-block\n\nBoth drive `M.run({ task = ..., max_retries = N })`.",
+      "tags": null,
+      "type": "runnable",
+      "type_source": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
     {
       "name": "swarm_aggregate_plugin",
       "version": "0.1.0",
@@ -19,10 +34,10 @@
     },
     {
       "name": "swarm_frame",
-      "version": "0.8.0",
-      "description": "Thin runtime for ProgramableSwarm — state container, session-key path registry, verdict parser, linear pipeline runner, and lshape 3-mode validation wrapper.",
+      "version": "0.9.0",
+      "description": "Thin runtime for ProgramableSwarm — state container, session-key path registry, verdict parser, linear pipeline runner, lshape 3-mode validation wrapper, and control-flow combinators (sequence / loop / branch / verdict_loop).",
       "category": "frame",
-      "docstring": "swarm_frame — Thin runtime for ProgramableSwarm.\n\nProvides the back-stage that user code never has to think about:\nstate container, session-key path registry, verdict parsing, linear\npipeline runner, and an lshape 3-mode validation wrapper. User code\nonly registers a spec (and optionally a handler) per session-key\npath; state operations, step bookkeeping, logging, and verdict\nhandling are confined to the frame.\n\nSchema-as-Data and the persistable-by-construction invariant are\ninherited from lshape. See design/design-doc.md for details.\n\nStatus: v0.8.0 (artifact_store + 4-method backend + summarize on top of v0.7.0). API surface is under\nverification through the bundled_base_curator_orch rewrite.",
+      "docstring": "swarm_frame — Thin runtime for ProgramableSwarm.\n\nProvides the back-stage that user code never has to think about:\nstate container, session-key path registry, verdict parsing, linear\npipeline runner, and an lshape 3-mode validation wrapper. User code\nonly registers a spec (and optionally a handler) per session-key\npath; state operations, step bookkeeping, logging, and verdict\nhandling are confined to the frame.\n\nSchema-as-Data and the persistable-by-construction invariant are\ninherited from lshape. See design/design-doc.md for details.\n\nStatus: v0.9.0 (control-flow combinators: sequence / loop / branch / verdict_loop on top of v0.8.0\nartifact_store + summarize). API surface is under verification through the bundled_base_curator_orch\nrewrite.",
       "tags": null,
       "type": "library",
       "type_source": null,

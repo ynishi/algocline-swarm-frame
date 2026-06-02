@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.9.0 (2026-06-02, additive)
+
+### Added — swarm_frame (control-flow combinators)
+
+- `swarm_frame.sequence({handlers, cp_key?})` — ordered Handler list, short-circuits on non-DONE verdict
+- `swarm_frame.loop({body, until_, max, cp_key?})` — bounded iteration with `until_(ctx, response)` predicate exit
+- `swarm_frame.branch({cond, then_, else_?})` — single-shot dispatch; synthesizes DONE when `else_` is omitted on falsy cond
+- `swarm_frame.verdict_loop({gate, fix?, parser, max_retries, cp_key?})` — retry-on-FAIL gate with optional fix between attempts
+- lshape schemas registered into `lshape.check.default_registry` as `SwarmFrame.SequenceOpts` / `SwarmFrame.LoopOpts` / `SwarmFrame.BranchOpts` / `SwarmFrame.VerdictLoopOpts` / `SwarmFrame.Handler`
+
+### Added — packages/combinator_demo (new pkg)
+
+- `combinator_demo.run({task, max_retries?})` — minimal verdict_loop demo: asks `alc.llm` for an answer, retries when the response does not contain `\boxed{...}`
+- `examples/combinator_demo.lua` — mock-LLM smoke (`just combinator-demo`)
+- `scripts/e2e/combinator_demo.lua` — real-LLM e2e via agent-block (`just e2e combinator_demo`), uses `alc_run` trampoline since `alc_advice`'s strategy lookup does not consult variant scope in current alc
+
+### Internal
+
+- spec: `packages/swarm_frame/spec/combinator_{sequence,loop,branch,verdict_loop}_spec.lua` (3 contract cases per primitive, 12 total)
+- spec: `packages/swarm_frame/spec/combinator_composability_spec.lua` (4 boundary cases — nested verdict_loop⊃sequence, sequence⊃verdict_loop, branch⊃loop+sequence, callable-table handler)
+- design: `design/design-doc.md` §9 Control-flow combinators section added; mechanism/policy boundary documented; `_verdict_loop` direct-promote rejection rationale recorded
+
+### Bumped
+
+- `swarm_frame` v0.8.0 → v0.9.0 (minor additive)
+- `swarm_frame.plain_state.VERSION` 同 (sub-module 揃え)
+- `swarm_frame.normalize.VERSION` 同 (sub-module 揃え)
+- `combinator_demo` 新規 v0.1.0
+
 ## v0.8.0 (2026-05-31, additive)
 
 ### Added — swarm_frame (artifact_store sub-module)

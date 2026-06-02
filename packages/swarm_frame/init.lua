@@ -10,12 +10,13 @@
 --- Schema-as-Data and the persistable-by-construction invariant are
 --- inherited from lshape. See design/design-doc.md for details.
 ---
---- Status: v0.8.0 (artifact_store + 4-method backend + summarize on top of v0.7.0). API surface is under
---- verification through the bundled_base_curator_orch rewrite.
+--- Status: v0.9.0 (control-flow combinators: sequence / loop / branch / verdict_loop on top of v0.8.0
+--- artifact_store + summarize). API surface is under verification through the bundled_base_curator_orch
+--- rewrite.
 
 local M = {}
 
-M.VERSION = "0.8.0"
+M.VERSION = "0.9.0"
 
 -- DI seam: inject a custom JSON host to override the auto-detect chain.
 -- Set to a table { encode = fn, decode = fn } before any JSON helper is
@@ -101,11 +102,12 @@ function M._reset_host_for_testing() M.host = nil end
 
 M.meta = {
     name = "swarm_frame",
-    version = "0.8.0",
+    version = "0.9.0",
     category = "frame",
     description = "Thin runtime for ProgramableSwarm — state container, "
         .. "session-key path registry, verdict parser, linear pipeline runner, "
-        .. "and lshape 3-mode validation wrapper.",
+        .. "lshape 3-mode validation wrapper, and control-flow combinators "
+        .. "(sequence / loop / branch / verdict_loop).",
 }
 
 -- ─── JSON helpers (preserves the lshape Persistable invariant) ───────────────

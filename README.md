@@ -132,14 +132,36 @@ and `alc_pkg_link` the `packages/` directory as shown in "Setup".
 
 ## Status
 
-v0.8.0. Frame core (`swarm_frame` v0.8.0) with artifact store,
-ctx-aware gate routing, and Rich Verdict 2-layer separation.
-Token, Prompt, and task-dir resolver (`swarm_frame_algocline` v0.2.0).
-Swarm aggregate plugin (`swarm_aggregate_plugin` v0.1.0) bridging
-multi-agent debate (dmad / Du 2023) onto the dispatcher. Lua tests
-(319 cases) + mock smoke + real-LLM e2e (agent-block) all passing.
-Hub `hub_index.json` (3 entries) for `alc init` / `alc_hub_search`
-consumption.
+v0.9.0. Frame core (`swarm_frame` v0.9.0) with control-flow combinators
+(sequence / loop / branch / verdict_loop) on top of the v0.8.0
+artifact store, ctx-aware gate routing, and Rich Verdict 2-layer
+separation. Token, Prompt, and task-dir resolver
+(`swarm_frame_algocline` v0.2.0). Swarm aggregate plugin
+(`swarm_aggregate_plugin` v0.1.0) bridging multi-agent debate (dmad /
+Du 2023) onto the dispatcher. Engine-level combinator demo
+(`combinator_demo` v0.1.0). Lua tests (335 cases) + mock smoke +
+real-LLM e2e (agent-block) all passing. Hub `hub_index.json` for
+`alc init` / `alc_hub_search` consumption.
+
+### Control-flow combinators (v0.9.0)
+
+`swarm_frame.sequence` / `swarm_frame.loop` / `swarm_frame.branch` /
+`swarm_frame.verdict_loop` are mechanism-only Handler factories.
+Each returns a Handler matching the existing `run_linear` contract
+(`fun(ctx, spec?) -> response`), so combinators nest freely inside
+each other and inside `frame.register`. The Engine owns iteration,
+predicate evaluation, cp_state idempotent persistence, and verdict
+short-circuit; the caller owns `parser` / `cond` / `fix` (Application
+policy). See `design/design-doc.md` §9 for the boundary and
+`packages/swarm_frame/spec/combinator_composability_spec.lua` for
+nesting contracts.
+
+New surface:
+- `swarm_frame.sequence({handlers = {...}, cp_key?})` — ordered handler list, short-circuits on non-DONE.
+- `swarm_frame.loop({body, until_, max, cp_key?})` — bounded iteration with predicate exit.
+- `swarm_frame.branch({cond, then_, else_?})` — single-shot dispatch on `cond(ctx)`.
+- `swarm_frame.verdict_loop({gate, fix?, parser, max_retries, cp_key?})` — retry-on-FAIL with optional fix between attempts.
+- `packages/combinator_demo` — minimal pkg demonstrating verdict_loop with `\boxed{...}` parser; `just combinator-demo` runs mock-LLM smoke, `just e2e combinator_demo` runs real-LLM e2e via agent-block.
 
 ### Artifact store (v0.8.0)
 
