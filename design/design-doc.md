@@ -187,7 +187,81 @@ NEEDS_INPUT semantics that production pipelines depend on.
    validate the migration path; consumers with accumulated
    convention drift come last.
 
-## 9. Open questions
+## 9. Control-flow combinators
+
+`swarm_frame.run_linear` covers the "1 path = 1 step, halt on
+non-DONE" base case. Real pipelines (Builder-Critic loops, optional
+branches, retry-on-FAIL) demand more shape. Rather than growing
+`run_linear` knobs (`gate.agent` / `fix.handler` / `cp_state_key` …
+the `_verdict_loop` prototype from coding-orch surfaced 96 lines
+worth of policy), the Engine exposes four mechanism-only combinators
+that return Handlers. Each Handler matches `run_linear`'s contract
+(`fun(ctx, spec?) -> response`), so they compose freely inside each
+other and inside `frame.register`.
+
+### Primitives
+
+| Combinator       | Shape (lshape schema)         | Mechanism                                                                          |
+|------------------|-------------------------------|------------------------------------------------------------------------------------|
+| `sequence`       | `SwarmFrame.SequenceOpts`     | Runs handlers in order; short-circuits and propagates a non-DONE verdict.          |
+| `loop`           | `SwarmFrame.LoopOpts`         | Iterates `body` until `until_(ctx, response)` is truthy or `max` is reached.       |
+| `branch`         | `SwarmFrame.BranchOpts`       | Evaluates `cond(ctx)` once and dispatches to `then_` / `else_`; synthesizes DONE when `else_` is omitted on falsy cond. |
+| `verdict_loop`   | `SwarmFrame.VerdictLoopOpts`  | Runs `gate` up to `max_retries + 1` times; calls optional `fix` between failures; `parser(response) -> bool` decides pass. |
+
+Each schema is registered into `lshape.check.default_registry` under
+its `SwarmFrame.*` name, so a validation failure cites the schema by
+name (e.g. `"SwarmFrame.VerdictLoopOpts: missing key 'gate'"`) rather
+than dumping the entire shape.
+
+### Engine / Application boundary
+
+| Layer       | Owns                                                                                          |
+|-------------|-----------------------------------------------------------------------------------------------|
+| Engine      | iteration, predicate evaluation, cp_state idempotent persistence, verdict short-circuit       |
+| Application | which handler to invoke, what a verdict means (`parser`), what `fix` does, what `cond` checks |
+
+The Engine never inspects the response body. `parser(response) ->
+bool` and `cond(ctx) -> bool` are the *only* places domain-aware
+logic lives, and both are caller-supplied. This is the same
+`mechanism, not policy` idiom Flask documents for its core, and the
+reason `_verdict_loop`'s direct promotion was rejected — it embedded
+`cfg.gate.agent`, `cfg.fix.build_step_label`, and
+`runtime.flow.state_save` into the Engine, which would force every
+downstream pipeline to either match the coding-orch shape or
+re-implement.
+
+### Composition
+
+The four combinators form a closed Handler algebra. Concrete idioms
+verified in `packages/swarm_frame/spec/combinator_composability_spec.lua`:
+
+- **Verdict-gated multi-step**: `verdict_loop(gate = sequence(prep, check), fix = ...)`. The sequence re-runs from index 1 on each retry; cp_state is reset on PASS.
+- **Pipeline with embedded retry**: `sequence(pre, verdict_loop(...), post)`. A retry-exhausted `BLOCKED` from the inner loop short-circuits the surrounding sequence.
+- **Conditional pipeline**: `branch(cond, then_ = loop(...), else_ = sequence(...))`.
+- **Callable-table handlers**: combinator factories return tables wrapping closures; the Handler schema (`T.any_of({fn, table})`) accepts both, so nesting works regardless of which factory produced the sub-handler.
+
+### `cp_state` (resume idempotence)
+
+When `cp_key` is supplied, the combinator persists progress via
+`ctx.state:set(cp_key, value)` + `ctx.state:commit()`. The Engine
+never reads `ctx.cp_state` directly — it goes through the State
+abstraction (§5), so the combinators stay decoupled from flow's
+persistence shape. On full completion the key is reset to 0 so a
+re-entry starts fresh; on short-circuit (non-DONE / non-PASS) the
+key keeps its last value so a resumed session retries the same step.
+
+### What's not in the Engine
+
+- Concurrency. Parallel fan-out is `swarm_frame.parallel` (§3); the
+  combinators are sequential by design.
+- Policy-aware retry backoff (sleep, jitter, deadline-aware budgets).
+  Callers wrap `fix` if they need timing.
+- Verdict shape extensions (custom statuses beyond DONE / BLOCKED /
+  NEEDS_INPUT). `parser` is free to interpret any string / table the
+  application emits; the surrounding `run_linear` sees only what the
+  outermost handler returns.
+
+## 10. Open questions
 
 - ~~The shape of the algocline dispatcher adapter~~ → **Resolved**:
   separate `swarm_frame_algocline` package (kept in the same repo for

@@ -3004,6 +3004,11 @@ end)
 
 dofile("packages/swarm_frame/spec/artifact_store_spec.lua")
 dofile("packages/swarm_frame_algocline/spec/resolve_task_dir_spec.lua")
+dofile("packages/swarm_frame/spec/combinator_sequence_spec.lua")
+dofile("packages/swarm_frame/spec/combinator_loop_spec.lua")
+dofile("packages/swarm_frame/spec/combinator_branch_spec.lua")
+dofile("packages/swarm_frame/spec/combinator_verdict_loop_spec.lua")
+dofile("packages/swarm_frame/spec/combinator_composability_spec.lua")
 
 -- Final exit code: non-zero on failure
 local results = lust.get_results()

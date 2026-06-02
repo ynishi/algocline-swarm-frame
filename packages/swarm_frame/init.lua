@@ -822,4 +822,22 @@ M.backend_artifact_file = _astore.backend_artifact_file
 M.backend_artifact_memory = _astore.backend_artifact_memory
 M.summarize = _astore.summarize
 
+-- ─── combinators sub-module (control flow primitives) ──────────────────────
+--
+-- `swarm_frame.sequence(opts)`     — linear chain of handlers
+-- `swarm_frame.loop(opts)`         — bounded iteration with until_ predicate
+-- `swarm_frame.branch(opts)`       — cond-based then_/else_ dispatch
+-- `swarm_frame.verdict_loop(opts)` — gate + optional fix retry loop
+--
+-- Each returns a Handler (function(ctx, spec) -> response) that satisfies
+-- the run_linear handler contract, so combinators nest naturally.
+-- Schema definitions live in combinator_shapes.lua and are registered
+-- under "SwarmFrame.*" names in lshape.check.default_registry.
+
+local _comb = require("swarm_frame.combinators")
+M.sequence = _comb.sequence
+M.loop = _comb.loop
+M.branch = _comb.branch
+M.verdict_loop = _comb.verdict_loop
+
 return M
