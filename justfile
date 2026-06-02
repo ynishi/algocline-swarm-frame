@@ -31,6 +31,14 @@ check:
 smoke:
     lua examples/swarm_aggregate_dmad.lua
 
+# Mock-LLM example for the Engine combinators: drives combinator_demo
+# (verdict_loop wrapping a single alc.llm gate) with a deterministic
+# mock that fails the parser twice then passes on attempt 3. Proves
+# verdict_loop retry + short-circuit semantics end-to-end. No API key
+# required.
+combinator-demo:
+    lua examples/combinator_demo.lua
+
 # Conway GoL Primitive spike (umbrella 1779690943-76260 §9 (iv)).
 # 5x5 grid + glider + 5 generations, composed from 3 Pure Primitives:
 # slot_table (P1) + broadcast_bus (P6) + transition_rules (P7).
