@@ -8,8 +8,14 @@ describe("swarm_frame.verdict_loop", function()
     it("returns the gate response when parser passes on first try", function()
         local gate_calls, fix_calls = 0, 0
         local h = frame.verdict_loop({
-            gate = function() gate_calls = gate_calls + 1 return "PASS" end,
-            fix = function() fix_calls = fix_calls + 1 return "" end,
+            gate = function()
+                gate_calls = gate_calls + 1
+                return "PASS"
+            end,
+            fix = function()
+                fix_calls = fix_calls + 1
+                return ""
+            end,
             parser = function(r) return r == "PASS" end,
             max_retries = 3,
         })
@@ -28,7 +34,10 @@ describe("swarm_frame.verdict_loop", function()
                 gate_calls = gate_calls + 1
                 return responses[gate_calls]
             end,
-            fix = function() fix_calls = fix_calls + 1 return "" end,
+            fix = function()
+                fix_calls = fix_calls + 1
+                return ""
+            end,
             parser = function(r) return r == "PASS" end,
             max_retries = 3,
         })

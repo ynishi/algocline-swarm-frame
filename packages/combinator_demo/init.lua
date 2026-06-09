@@ -74,8 +74,8 @@ function M.run(opts)
             hint = "Wrap your final numeric answer in \\boxed{...}."
         else
             hint = string.format(
-                "Attempt %d: your previous answer did not contain \\boxed{...}. " ..
-                "Please wrap the number in \\boxed{...} this time.",
+                "Attempt %d: your previous answer did not contain \\boxed{...}. "
+                    .. "Please wrap the number in \\boxed{...} this time.",
                 attempts
             )
         end
@@ -83,9 +83,7 @@ function M.run(opts)
         return alc.llm(prompt)
     end
 
-    local parser = function(response)
-        return type(response) == "string" and response:find("\\boxed{", 1, true) ~= nil
-    end
+    local parser = function(response) return type(response) == "string" and response:find("\\boxed{", 1, true) ~= nil end
 
     local h = frame.verdict_loop({
         gate = gate,
@@ -97,9 +95,7 @@ function M.run(opts)
     local response = h(ctx)
 
     local boxed
-    if type(response) == "string" then
-        boxed = response:match("\\boxed{([^}]*)}")
-    end
+    if type(response) == "string" then boxed = response:match("\\boxed{([^}]*)}") end
 
     return {
         ok = parser(response),

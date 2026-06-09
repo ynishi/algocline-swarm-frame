@@ -35,15 +35,15 @@
 --- (`before_dispatch` / `around_dispatch` / `after_dispatch` /
 --- `finalize`) for callers to layer the rest on top.
 ---
---- Status: v0.2.0 (Token & Prompt + format mode + resolve_task_dir).
+--- Status: v0.3.0 (Token & Prompt + format mode + resolve_task_dir + step lifecycle hooks).
 
 local M = {}
 
-M.VERSION = "0.2.0"
+M.VERSION = "0.3.0"
 
 M.meta = {
     name = "swarm_frame_algocline",
-    version = "0.2.0",
+    version = "0.3.0",
     category = "frame_primitive",
     description = "Token & Prompt round-trip primitive — routes prompts to "
         .. "flow.llm_bound (strict / format) or alc.llm directly (non-check), "
@@ -63,8 +63,11 @@ M.step_id_of = require("swarm_frame").step_id_of
 ---     flow     : table?,                               -- test injection (defaults to require("flow"))
 ---     frame    : table?,                               -- test injection (defaults to require("swarm_frame"))
 ---     alc      : table?,                               -- test injection (defaults to _G.alc); used in non-check mode
----     extras   : table?,                               -- opaque pass-through dict (see below)
----     plugins  : table[]?,                             -- Phase 2 dispatch plugin chain (see below)
+---     extras    : table?,                              -- opaque pass-through dict (see below)
+---     plugins   : table[]?,                            -- Phase 2 dispatch plugin chain (see below)
+---     safeguard : table?,                              -- Stop safeguard opts (see below)
+---                   max_dispatch_per_step : integer?   -- ctx.dispatch call limit per step (default 16)
+---                   max_recursion_depth   : integer?   -- ctx.dispatch nest depth limit (default 4)
 --- }
 --- @return userdata callable_dispatcher           -- callable table; see below
 ---
@@ -98,6 +101,12 @@ M.step_id_of = require("swarm_frame").step_id_of
 ---   * after_dispatch(response, spec, ctx) — sequential, response read-only
 ---   * finalize(state) — collected during `dispatcher.finalize(opts)`,
 ---     used to build alc.card groups (Card creation primitive; see below)
+---   * before_step(step_id, spec, ctx) — step-level sequential pre-hook
+---   * around_step(inner, step_id, spec, ctx) — step-level onion wrap;
+---     inner() invokes the full dispatch chain (before/around/after_dispatch)
+---   * after_step(response, step_id, spec, ctx) — step-level sequential post-hook
+---   * step_writes (string[]) — advisory: list of step_ids this plugin wraps
+---     (collision warn when 2+ plugins declare the same step_id)
 ---
 --- ctx fields available to plugins:
 ---   ctx.path / ctx.step / ctx.state / ctx.extras / ctx.scratch /
@@ -170,6 +179,29 @@ function M.make_dispatcher(opts)
     local state = opts.state
     local llm_opts = opts.llm_opts -- forwarded verbatim; may be nil
 
+    -- Stop safeguard opts (Phase B step hook extension).
+    local safeguard_opts = opts.safeguard
+    if safeguard_opts ~= nil and type(safeguard_opts) ~= "table" then
+        error("swarm_frame_algocline.make_dispatcher: opts.safeguard must be a table or nil")
+    end
+    safeguard_opts = safeguard_opts or {}
+    local max_dispatch_per_step = safeguard_opts.max_dispatch_per_step or 16
+    local max_recursion_depth = safeguard_opts.max_recursion_depth or 4
+    if type(max_dispatch_per_step) ~= "number" or max_dispatch_per_step < 1 then
+        error("swarm_frame_algocline.make_dispatcher: opts.safeguard.max_dispatch_per_step must be a positive integer")
+    end
+    if type(max_recursion_depth) ~= "number" or max_recursion_depth < 1 then
+        error("swarm_frame_algocline.make_dispatcher: opts.safeguard.max_recursion_depth must be a positive integer")
+    end
+
+    -- Safeguard counters: closure upvalue (NOT in ctx.scratch — ctx.scratch
+    -- is cleanup-cleared per-dispatch; counters must survive the outermost call).
+    -- Layout: dispatch_counters[plugin_name][step_id] = count
+    -- Tracks per-plugin per-step ctx.dispatch call depth for max_dispatch_per_step.
+    -- recursion_depth tracks overall nesting depth across all plugins.
+    local dispatch_counters = {} -- [plugin_name][step_id] = count
+    local recursion_depth = 0 -- current ctx.dispatch nesting depth
+
     -- Opaque extension dict. The adapter never reads from it; it is
     -- handed back to the caller via `dispatcher.extras` so plugins /
     -- hooks attached at the orch layer can pull config (variant
@@ -194,6 +226,7 @@ function M.make_dispatcher(opts)
     -- C2: Aggregation accumulators for declared write contracts.
     -- spec_writes_registry / state_writes_registry surface what each
     -- plugin intends to write (spec fields and state.data._* keys).
+    -- step_writes_registry tracks which plugins declare wrapping a step_id.
     -- Frame collects, validates shape, warns on collision (multiple
     -- plugins declaring write to the same field), and exposes the
     -- registry via dispatcher.spec_writes / dispatcher.state_writes
@@ -203,6 +236,7 @@ function M.make_dispatcher(opts)
     -- discipline is the same camp as pluggy hookspec/hookimpl).
     local spec_writes_registry = {} -- { [field] = { plugin_name, ... } }
     local state_writes_registry = {} -- { [key]   = { plugin_name, ... } }
+    local step_writes_registry = {} -- { [step_id] = { plugin_name, ... } }
     for i, p in ipairs(plugins) do
         if type(p) ~= "table" then
             error("swarm_frame_algocline.make_dispatcher: plugins[" .. i .. "] must be a table, got " .. type(p))
@@ -210,7 +244,15 @@ function M.make_dispatcher(opts)
         if type(p.name) ~= "string" or p.name == "" then
             error("swarm_frame_algocline.make_dispatcher: plugins[" .. i .. "].name must be a non-empty string")
         end
-        for _, hk in ipairs({ "before_dispatch", "around_dispatch", "after_dispatch", "finalize" }) do
+        for _, hk in ipairs({
+            "before_dispatch",
+            "around_dispatch",
+            "after_dispatch",
+            "finalize",
+            "before_step",
+            "around_step",
+            "after_step",
+        }) do
             if p[hk] ~= nil and type(p[hk]) ~= "function" then
                 error(
                     "swarm_frame_algocline.make_dispatcher: plugins[" .. i .. "]." .. hk .. " must be a function or nil"
@@ -274,6 +316,29 @@ function M.make_dispatcher(opts)
                 table.insert(state_writes_registry[k], p.name)
             end
         end
+        -- C2: optional step_writes declaration (list of step_id strings this plugin wraps)
+        if p.step_writes ~= nil then
+            if type(p.step_writes) ~= "table" then
+                error(
+                    "swarm_frame_algocline.make_dispatcher: plugins["
+                        .. i
+                        .. "].step_writes must be a list of strings or nil"
+                )
+            end
+            for j, s in ipairs(p.step_writes) do
+                if type(s) ~= "string" or s == "" then
+                    error(
+                        "swarm_frame_algocline.make_dispatcher: plugins["
+                            .. i
+                            .. "].step_writes["
+                            .. j
+                            .. "] must be a non-empty string"
+                    )
+                end
+                step_writes_registry[s] = step_writes_registry[s] or {}
+                table.insert(step_writes_registry[s], p.name)
+            end
+        end
     end
 
     -- C2: collision warn (multiple plugins declaring write to same field).
@@ -300,6 +365,12 @@ function M.make_dispatcher(opts)
     end
     warn_collisions(spec_writes_registry, "spec_writes")
     warn_collisions(state_writes_registry, "state_writes")
+    -- step_writes collision: OQ-4 recommendation = warn + first-only (OUTERMOST rule).
+    -- The outermost plugin (first to declare) is authoritative; subsequent
+    -- plugins that declare the same step_id are warned but still active in
+    -- their own hooks — the "first-only" is advisory for collision detection,
+    -- not hard enforcement at the hook-execution level.
+    warn_collisions(step_writes_registry, "step_writes")
 
     -- C3: route_llm — shared check_mode-aware routing primitive. Both
     -- core_dispatch (the orch's intended call) and ctx.llm_call (plugin
@@ -607,6 +678,41 @@ function M.make_dispatcher(opts)
         return written
     end
 
+    -- BLOCKED_panic: convert a plugin hook raise into a BLOCKED return string.
+    -- Mirrors the finalize pcall pattern (L462). Records warn + stack trace via
+    -- alc.log. Used by step hooks (before_step / around_step / after_step).
+    local function BLOCKED_panic(plugin_name, hook_name, err)
+        if type(alc_pkg) == "table" and type(alc_pkg.log) == "function" then
+            alc_pkg.log(
+                "warn",
+                "swarm_frame_algocline: plugin[" .. plugin_name .. "]." .. hook_name .. " raised: " .. tostring(err)
+            )
+        end
+        return string.format(
+            "BLOCKED reason=swarm_frame_algocline.plugin_panic plugin=%s hook=%s err=%s",
+            plugin_name,
+            hook_name,
+            tostring(err)
+        )
+    end
+
+    -- check_dispatch_limit: verify per-plugin per-step ctx.dispatch call count.
+    -- Returns a BLOCKED string if the limit is exceeded, nil otherwise.
+    local function check_dispatch_limit(plugin_name, step_id)
+        dispatch_counters[plugin_name] = dispatch_counters[plugin_name] or {}
+        local cnt = (dispatch_counters[plugin_name][step_id] or 0) + 1
+        dispatch_counters[plugin_name][step_id] = cnt
+        if cnt > max_dispatch_per_step then
+            return string.format(
+                "BLOCKED reason=swarm_frame_algocline.max_dispatch_per_step plugin=%s step=%s count=%d",
+                plugin_name,
+                step_id,
+                cnt
+            )
+        end
+        return nil
+    end
+
     -- Return a callable table:
     --   dispatcher(...)             dispatches via the __call metamethod
     --   dispatcher.extras           opaque pass-through dict (Phase 1)
@@ -614,12 +720,14 @@ function M.make_dispatcher(opts)
     --   dispatcher.finalize         Card primitive (Phase 2; see above)
     --   dispatcher.spec_writes      declared spec-field contracts (C2)
     --   dispatcher.state_writes     declared state.data._* contracts (C2)
+    --   dispatcher.step_writes      declared step_id wrap contracts (Phase B)
     return setmetatable({
         extras = extras,
         plugins = plugins,
         finalize = finalize_cards,
         spec_writes = spec_writes_registry,
         state_writes = state_writes_registry,
+        step_writes = step_writes_registry,
     }, {
         __call = function(_self, path_or_step, spec, _ctx)
             -- Build per-call ctx for plugins. Plugins should write to
@@ -638,6 +746,14 @@ function M.make_dispatcher(opts)
             -- Expose frame to plugins that may need parse_verdict in
             -- around_dispatch (cascade / reflexion etc.).
             ctx.frame = frame_pkg
+
+            -- Phase B: _outermost_call flag (Phase 4 A5).
+            -- Only the outermost __call invocation owns the ctx cleanup.
+            -- ctx.dispatch recursive invocations (inner __call) must NOT
+            -- clean up ctx, or else the outer step hooks (after_step etc.)
+            -- would see nil fields.
+            local is_outermost = (ctx._outermost_call == nil)
+            if is_outermost then ctx._outermost_call = true end
 
             -- C3: ctx.llm_call — auxiliary LLM call routed through the
             -- Frame's check_mode-aware route_llm helper. Plugins that
@@ -696,30 +812,190 @@ function M.make_dispatcher(opts)
                 return route_llm(call_prompt, effective, call_slot)
             end
 
-            -- before_dispatch: sequential, spec is mutable.
-            for _, p in ipairs(plugins) do
-                if p.before_dispatch then p.before_dispatch(spec, ctx) end
+            -- Phase B: ctx.dispatch primitive (Crux 1 — constitutional).
+            -- Invokes the same dispatcher (_self) recursively, preserving the
+            -- path (step_id). This ensures spec2 passes through the full
+            -- before_dispatch / around_dispatch / after_dispatch chain to reach
+            -- core_dispatch. Chain-skip (direct core_dispatch call) is FORBIDDEN
+            -- per crux-card.md Crux 1 must_not_simplify.
+            -- The _in_step_dispatch flag is set before this call returns so that
+            -- the recursive __call invocation skips the step hooks, preventing
+            -- double-firing (before_step / around_step / after_step run only once
+            -- per original step invocation, not per ctx.dispatch sub-call).
+            ctx.dispatch = function(spec2)
+                -- Recursion depth safeguard (max_recursion_depth).
+                recursion_depth = recursion_depth + 1
+                if recursion_depth > max_recursion_depth then
+                    recursion_depth = recursion_depth - 1
+                    return string.format(
+                        "BLOCKED reason=swarm_frame_algocline.max_recursion_depth depth=%d",
+                        recursion_depth + 1
+                    )
+                end
+                -- Per-plugin per-step dispatch count safeguard.
+                -- Since ctx.dispatch is called from within a plugin hook,
+                -- we attribute the count to the current step_id. The plugin
+                -- name context is the calling plugin; we use a sentinel key
+                -- "ctx.dispatch" to track the aggregate per-step count.
+                local limit_err = check_dispatch_limit("ctx.dispatch", ctx.step)
+                if limit_err then
+                    recursion_depth = recursion_depth - 1
+                    return limit_err
+                end
+                -- Crux 1: re-invoke via _self so the full dispatch chain runs.
+                local result = _self(ctx.path, spec2, ctx)
+                recursion_depth = recursion_depth - 1
+                return result
             end
 
-            -- around_dispatch: onion wrap, innermost = core_dispatch.
-            -- The wrap order is reverse so that plugins[1].around is
-            -- the outermost layer (first to see spec, last to see
-            -- response) — matches the intuitive before / after order.
-            local wrapped = core_dispatch
-            for i = #plugins, 1, -1 do
-                local p = plugins[i]
-                if p.around_dispatch then
-                    local inner = wrapped
-                    local this_p = p
-                    wrapped = function(s, c) return this_p.around_dispatch(inner, s, c) end
+            -- Phase B: dispatch chain builder (shared by step-hook path and
+            -- step-skip path). Builds the around_dispatch onion wrap around
+            -- core_dispatch. This is the canonical dispatch_chain that
+            -- around_step's inner() must invoke (Crux 2).
+            local dispatch_chain
+            do
+                -- before_dispatch: sequential, spec is mutable.
+                -- (Run inline in the dispatch_chain_call below.)
+                -- around_dispatch: onion wrap, innermost = core_dispatch.
+                -- The wrap order is reverse so that plugins[1].around is
+                -- the outermost layer (first to see spec, last to see
+                -- response) — matches the intuitive before / after order.
+                local wrapped = core_dispatch
+                for i = #plugins, 1, -1 do
+                    local p = plugins[i]
+                    if p.around_dispatch then
+                        local inner = wrapped
+                        local this_p = p
+                        wrapped = function(s, c) return this_p.around_dispatch(inner, s, c) end
+                    end
+                end
+                -- dispatch_chain_call: runs before_dispatch + around_dispatch
+                -- onion + after_dispatch for a given (s, c) pair.
+                -- This is what around_step's inner() calls (Crux 2).
+                local wrapped_ref = wrapped
+                dispatch_chain = function(s, c)
+                    -- before_dispatch: sequential, spec is mutable.
+                    for _, p in ipairs(plugins) do
+                        if p.before_dispatch then p.before_dispatch(s, c) end
+                    end
+                    -- around_dispatch onion → core_dispatch
+                    local resp = wrapped_ref(s, c)
+                    -- after_dispatch: sequential, response read-only.
+                    for _, p in ipairs(plugins) do
+                        if p.after_dispatch then p.after_dispatch(resp, s, c) end
+                    end
+                    return resp
                 end
             end
 
-            local response = wrapped(spec, ctx)
+            local response
 
-            -- after_dispatch: sequential, response read-only.
-            for _, p in ipairs(plugins) do
-                if p.after_dispatch then p.after_dispatch(response, spec, ctx) end
+            -- Phase B: step hook skip path.
+            -- When ctx._in_step_dispatch is true, this __call was triggered
+            -- by ctx.dispatch from within a step hook. Step hooks must NOT
+            -- re-fire (double-firing prevention). We run the dispatch chain
+            -- only (before/around/after_dispatch), bypassing step hooks.
+            if ctx._in_step_dispatch then
+                response = dispatch_chain(spec, ctx)
+            else
+                -- Normal path: step hooks enabled.
+                -- Set _in_step_dispatch before invoking dispatch_chain so that
+                -- any ctx.dispatch calls made from within step hooks skip step
+                -- hooks in the recursive invocation.
+                ctx._in_step_dispatch = true
+
+                -- before_step: sequential, plugins[1] → [N].
+                local step_id = ctx.step
+                for _, p in ipairs(plugins) do
+                    if p.before_step then
+                        local ok, err = pcall(p.before_step, step_id, spec, ctx)
+                        if not ok then
+                            ctx._in_step_dispatch = nil
+                            if is_outermost then
+                                ctx.path = nil
+                                ctx.step = nil
+                                ctx.flow_state = nil
+                                ctx.extras = nil
+                                ctx.scratch = nil
+                                ctx.frame = nil
+                                ctx.llm_call = nil
+                                ctx.dispatch = nil
+                                ctx._outermost_call = nil
+                                ctx._in_step_dispatch = nil
+                            end
+                            return BLOCKED_panic(p.name, "before_step", err)
+                        end
+                    end
+                end
+
+                -- around_step: reverse onion wrap (plugins[1] = OUTERMOST).
+                -- inner = dispatch_chain (before/around/after_dispatch → core_dispatch).
+                -- Crux 2: inner must invoke dispatch_chain, NOT a stub.
+                local step_wrapped = dispatch_chain
+                for i = #plugins, 1, -1 do
+                    local p = plugins[i]
+                    if p.around_step then
+                        local inner = step_wrapped
+                        local this_p = p
+                        step_wrapped = function(s, c) return this_p.around_step(inner, step_id, s, c) end
+                    end
+                end
+
+                -- Execute the step-wrapped dispatch chain.
+                local ok_sw, sw_result = pcall(step_wrapped, spec, ctx)
+                if not ok_sw then
+                    -- Find the around_step plugin that panicked. Since we can't
+                    -- easily identify which plugin threw in a wrapped chain, we
+                    -- report using the outermost plugin name that has around_step.
+                    local panic_plugin = "unknown"
+                    for _, p in ipairs(plugins) do
+                        if p.around_step then
+                            panic_plugin = p.name
+                            break
+                        end
+                    end
+                    ctx._in_step_dispatch = nil
+                    if is_outermost then
+                        ctx.path = nil
+                        ctx.step = nil
+                        ctx.flow_state = nil
+                        ctx.extras = nil
+                        ctx.scratch = nil
+                        ctx.frame = nil
+                        ctx.llm_call = nil
+                        ctx.dispatch = nil
+                        ctx._outermost_call = nil
+                        ctx._in_step_dispatch = nil
+                    end
+                    return BLOCKED_panic(panic_plugin, "around_step", sw_result)
+                end
+                response = sw_result
+
+                -- after_step: sequential, plugins[1] → [N].
+                for _, p in ipairs(plugins) do
+                    if p.after_step then
+                        local ok, err = pcall(p.after_step, response, step_id, spec, ctx)
+                        if not ok then
+                            ctx._in_step_dispatch = nil
+                            if is_outermost then
+                                ctx.path = nil
+                                ctx.step = nil
+                                ctx.flow_state = nil
+                                ctx.extras = nil
+                                ctx.scratch = nil
+                                ctx.frame = nil
+                                ctx.llm_call = nil
+                                ctx.dispatch = nil
+                                ctx._outermost_call = nil
+                                ctx._in_step_dispatch = nil
+                            end
+                            return BLOCKED_panic(p.name, "after_step", err)
+                        end
+                    end
+                end
+
+                -- Reset _in_step_dispatch after all step hooks complete.
+                ctx._in_step_dispatch = nil
             end
 
             -- Cleanup Frame-injected fields so the caller's ctx stays
@@ -730,13 +1006,19 @@ function M.make_dispatcher(opts)
             -- Plugins must capture anything they need via closure
             -- variables during the hook calls; reading these fields
             -- outside the dispatch is not supported.
-            ctx.path = nil
-            ctx.step = nil
-            ctx.flow_state = nil
-            ctx.extras = nil
-            ctx.scratch = nil
-            ctx.frame = nil
-            ctx.llm_call = nil
+            -- Only the outermost __call cleans up (Phase 4 A5).
+            if is_outermost then
+                ctx.path = nil
+                ctx.step = nil
+                ctx.flow_state = nil
+                ctx.extras = nil
+                ctx.scratch = nil
+                ctx.frame = nil
+                ctx.llm_call = nil
+                ctx.dispatch = nil
+                ctx._outermost_call = nil
+                ctx._in_step_dispatch = nil
+            end
 
             return response or ""
         end,
@@ -745,9 +1027,7 @@ end
 
 -- ─── resolve_task_dir helpers ───────────────────────────────────────
 
-local function _shell_quote(s)
-    return "'" .. s:gsub("'", "'\\''") .. "'"
-end
+local function _shell_quote(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
 
 local function _mkdir_p(path)
     local cmd = "mkdir -p " .. _shell_quote(path)
@@ -788,8 +1068,7 @@ function M.resolve_task_dir(opts)
     if not project_root then project_root = env("ALC_PROJECT_ROOT") end
     if not project_root then project_root = env("PWD") end
     if not project_root then
-        return nil,
-            "swarm_frame_algocline.resolve_task_dir: no project_root found in opts / ALC_PROJECT_ROOT / PWD"
+        return nil, "swarm_frame_algocline.resolve_task_dir: no project_root found in opts / ALC_PROJECT_ROOT / PWD"
     end
     local abs_dir
     if opts.namespace and opts.namespace ~= "" then
