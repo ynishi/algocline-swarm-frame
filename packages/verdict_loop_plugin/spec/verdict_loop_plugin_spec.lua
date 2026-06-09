@@ -318,9 +318,11 @@ describe("verdict_loop_plugin", function()
 
             plugin.around_step(inner, "GATE", {}, ctx)
 
-            -- fix dispatch should be called (blocked before last attempt)
-            expect(#ctx._dispatch_calls).to.be.greater_than(0)
+            -- fix dispatch should be called on each blocked attempt before last
+            -- (max_retries=2 + parser blocked all → 3 attempts, 2 fix dispatches)
+            expect(#ctx._dispatch_calls).to.equal(2)
             expect(ctx._dispatch_calls[1].agent).to.equal("@fix")
+            expect(ctx._dispatch_calls[2].agent).to.equal("@fix")
         end)
 
         it("passes on second attempt after fix", function()
