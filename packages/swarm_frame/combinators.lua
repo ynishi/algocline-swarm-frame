@@ -35,9 +35,7 @@ end
 -- (e.g. spec files that require combinators before init.lua finishes).
 local function _validate(value, schema, ctx_hint)
     local ok_frame, frame = pcall(require, "swarm_frame")
-    if ok_frame and type(frame.validate) == "function" then
-        return frame.validate(value, schema, ctx_hint)
-    end
+    if ok_frame and type(frame.validate) == "function" then return frame.validate(value, schema, ctx_hint) end
     local check = require("lshape.check")
     return check.assert(value, schema, ctx_hint)
 end
