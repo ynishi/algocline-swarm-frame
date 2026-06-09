@@ -1,6 +1,6 @@
 {
   "schema_version": "hub_index/v0",
-  "updated_at": "2026-06-02T09:14:11Z",
+  "updated_at": "2026-06-09T00:00:00Z",
   "packages": [
     {
       "name": "combinator_demo",
@@ -38,6 +38,21 @@
       "description": "Thin runtime for ProgramableSwarm — state container, session-key path registry, verdict parser, linear pipeline runner, lshape 3-mode validation wrapper, and control-flow combinators (sequence / loop / branch / verdict_loop).",
       "category": "frame",
       "docstring": "swarm_frame — Thin runtime for ProgramableSwarm.\n\nProvides the back-stage that user code never has to think about:\nstate container, session-key path registry, verdict parsing, linear\npipeline runner, and an lshape 3-mode validation wrapper. User code\nonly registers a spec (and optionally a handler) per session-key\npath; state operations, step bookkeeping, logging, and verdict\nhandling are confined to the frame.\n\nSchema-as-Data and the persistable-by-construction invariant are\ninherited from lshape. See design/design-doc.md for details.\n\nStatus: v0.9.0 (control-flow combinators: sequence / loop / branch / verdict_loop on top of v0.8.0\nartifact_store + summarize). API surface is under verification through the bundled_base_curator_orch\nrewrite.",
+      "tags": null,
+      "type": "library",
+      "type_source": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "verdict_loop_plugin",
+      "version": "0.1.0",
+      "description": "Swarm plugin that wraps a pipeline step with gate-verdict-fix-retry loop semantics (around_step + ctx.dispatch).",
+      "category": "frame_plugin",
+      "docstring": "verdict_loop_plugin is a Swarm plugin that wraps a pipeline step with gate-verdict-fix-retry loop semantics\n\nFor each attempt up to max_retries+1, dispatches the gate step via\naround_step inner(), evaluates the response with parser(), returns on\n\"pass\", calls ctx.dispatch(fix_spec) on \"blocked\" if fix_spec is\npresent, and returns an exhausted BLOCKED string after all attempts\nare consumed.\n\nUsage: M.create({ step_id, gate_spec, parser, fix_spec?, max_retries?, verdict_key? })\n\nStatus: v0.1.0",
       "tags": null,
       "type": "library",
       "type_source": null,
