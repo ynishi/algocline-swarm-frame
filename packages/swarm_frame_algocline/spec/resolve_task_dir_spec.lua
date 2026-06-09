@@ -8,25 +8,17 @@ local describe, it, expect = lust.describe, lust.it, lust.expect
 
 -- ─── helpers ────────────────────────────────────────────────────────
 
-local function _shell_quote(s)
-    return "'" .. s:gsub("'", "'\\''") .. "'"
-end
+local function _shell_quote(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
 
-local function _rm_rf(path)
-    os.execute("rm -rf " .. _shell_quote(path))
-end
+local function _rm_rf(path) os.execute("rm -rf " .. _shell_quote(path)) end
 
 --- Build an env-injector from a key→value map.
 local function make_env(map)
-    return function(name)
-        return map[name]
-    end
+    return function(name) return map[name] end
 end
 
 --- Unique temp base dir per test to avoid cross-test pollution.
-local function tmp_base()
-    return "/tmp/sfa_rtd_" .. tostring(math.random(1000000, 9999999))
-end
+local function tmp_base() return "/tmp/sfa_rtd_" .. tostring(math.random(1000000, 9999999)) end
 
 -- ─── specs ──────────────────────────────────────────────────────────
 
@@ -149,9 +141,7 @@ describe("resolve_task_dir", function()
     -- ----------------------------------------------------------------
     it("raises when task_id is nil", function()
         local env = make_env({ ALC_PROJECT_ROOT = "/some/path" })
-        local ok, err = pcall(function()
-            sfa.resolve_task_dir({ _env = env })
-        end)
+        local ok, err = pcall(function() sfa.resolve_task_dir({ _env = env }) end)
         expect(ok).to.equal(false)
         expect(string.find(err, "task_id is required", 1, true) ~= nil).to.equal(true)
     end)
@@ -161,9 +151,7 @@ describe("resolve_task_dir", function()
     -- ----------------------------------------------------------------
     it("raises when task_id is empty string", function()
         local env = make_env({ ALC_PROJECT_ROOT = "/some/path" })
-        local ok, err = pcall(function()
-            sfa.resolve_task_dir({ task_id = "", _env = env })
-        end)
+        local ok, err = pcall(function() sfa.resolve_task_dir({ task_id = "", _env = env }) end)
         expect(ok).to.equal(false)
         expect(string.find(err, "task_id is required", 1, true) ~= nil).to.equal(true)
     end)
@@ -172,9 +160,7 @@ describe("resolve_task_dir", function()
     -- 10. opts = nil → raises for missing task_id (not crash on nil opts)
     -- ----------------------------------------------------------------
     it("raises for missing task_id even when opts is nil", function()
-        local ok, err = pcall(function()
-            sfa.resolve_task_dir(nil)
-        end)
+        local ok, err = pcall(function() sfa.resolve_task_dir(nil) end)
         expect(ok).to.equal(false)
         expect(string.find(err, "task_id is required", 1, true) ~= nil).to.equal(true)
     end)

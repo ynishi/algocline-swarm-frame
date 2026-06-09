@@ -16,7 +16,10 @@ describe("swarm_frame combinator composability", function()
         local prep_calls, check_calls, fix_calls = 0, 0, 0
         local attempts = 0
         local gate = frame.sequence({
-            function() prep_calls = prep_calls + 1 return "DONE path=prep" end,
+            function()
+                prep_calls = prep_calls + 1
+                return "DONE path=prep"
+            end,
             function()
                 check_calls = check_calls + 1
                 attempts = attempts + 1
@@ -26,35 +29,47 @@ describe("swarm_frame combinator composability", function()
         })
         local h = frame.verdict_loop({
             gate = gate,
-            fix = function() fix_calls = fix_calls + 1 return "" end,
+            fix = function()
+                fix_calls = fix_calls + 1
+                return ""
+            end,
             parser = function(r) return r:find("PASS") ~= nil end,
             max_retries = 3,
         })
         local ctx = { state = frame.state_new() }
         local resp = h(ctx)
-        expect(prep_calls).to.equal(2)   -- sequence re-runs from start each attempt
+        expect(prep_calls).to.equal(2) -- sequence re-runs from start each attempt
         expect(check_calls).to.equal(2)
-        expect(fix_calls).to.equal(1)    -- one fix between two gate attempts
+        expect(fix_calls).to.equal(1) -- one fix between two gate attempts
         expect(resp:find("PASS")).to.exist()
     end)
 
     it("sequence containing a verdict_loop: short-circuits remaining steps when loop blocks", function()
         local pre_calls, post_calls, gate_calls = 0, 0, 0
         local inner = frame.verdict_loop({
-            gate = function() gate_calls = gate_calls + 1 return "FAIL" end,
+            gate = function()
+                gate_calls = gate_calls + 1
+                return "FAIL"
+            end,
             parser = function() return false end,
             max_retries = 1, -- 1 initial + 1 retry = 2 calls
         })
         local h = frame.sequence({
-            function() pre_calls = pre_calls + 1 return "DONE path=pre" end,
+            function()
+                pre_calls = pre_calls + 1
+                return "DONE path=pre"
+            end,
             inner,
-            function() post_calls = post_calls + 1 return "DONE path=post" end,
+            function()
+                post_calls = post_calls + 1
+                return "DONE path=post"
+            end,
         })
         local ctx = { state = frame.state_new() }
         local resp = h(ctx)
         expect(pre_calls).to.equal(1)
-        expect(gate_calls).to.equal(2)   -- exhausted retries
-        expect(post_calls).to.equal(0)   -- sequence short-circuited on non-DONE
+        expect(gate_calls).to.equal(2) -- exhausted retries
+        expect(post_calls).to.equal(0) -- sequence short-circuited on non-DONE
         expect(resp).to.equal("FAIL")
     end)
 
@@ -69,8 +84,14 @@ describe("swarm_frame combinator composability", function()
             max = 10,
         })
         local else_seq = frame.sequence({
-            function() seq_calls = seq_calls + 1 return "DONE path=alt_a" end,
-            function() seq_calls = seq_calls + 1 return "DONE path=alt_b" end,
+            function()
+                seq_calls = seq_calls + 1
+                return "DONE path=alt_a"
+            end,
+            function()
+                seq_calls = seq_calls + 1
+                return "DONE path=alt_b"
+            end,
         })
 
         -- Truthy branch: loop should run, sequence untouched.

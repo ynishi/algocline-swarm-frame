@@ -3009,6 +3009,7 @@ dofile("packages/swarm_frame/spec/combinator_loop_spec.lua")
 dofile("packages/swarm_frame/spec/combinator_branch_spec.lua")
 dofile("packages/swarm_frame/spec/combinator_verdict_loop_spec.lua")
 dofile("packages/swarm_frame/spec/combinator_composability_spec.lua")
+dofile("packages/verdict_loop_plugin/spec/verdict_loop_plugin_spec.lua")
 
 -- Final exit code: non-zero on failure
 local results = lust.get_results()

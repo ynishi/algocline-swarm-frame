@@ -9,8 +9,14 @@ describe("swarm_frame.branch", function()
         local taken
         local h = frame.branch({
             cond = function() return true end,
-            then_ = function() taken = "then" return "DONE path=then" end,
-            else_ = function() taken = "else" return "DONE path=else" end,
+            then_ = function()
+                taken = "then"
+                return "DONE path=then"
+            end,
+            else_ = function()
+                taken = "else"
+                return "DONE path=else"
+            end,
         })
         local ctx = { state = frame.state_new() }
         local resp = h(ctx)
@@ -22,8 +28,14 @@ describe("swarm_frame.branch", function()
         local taken
         local h = frame.branch({
             cond = function() return false end,
-            then_ = function() taken = "then" return "DONE path=then" end,
-            else_ = function() taken = "else" return "DONE path=else" end,
+            then_ = function()
+                taken = "then"
+                return "DONE path=then"
+            end,
+            else_ = function()
+                taken = "else"
+                return "DONE path=else"
+            end,
         })
         local ctx = { state = frame.state_new() }
         local resp = h(ctx)
