@@ -772,9 +772,14 @@ describe("step hooks", function()
             local call_count = 0
             local blocked_result = nil
 
+            -- around_dispatch hook is used (not around_step) because step hooks
+            -- are skipped on recursive ctx.dispatch via ctx._in_step_dispatch flag
+            -- (per Crux 2 + double-fire prevention, plan.md Phase 4 A2). Dispatch
+            -- hooks re-run on each __call recursion, which lets us nest ctx.dispatch
+            -- until max_recursion_depth trips.
             local p = {
                 name = "recursive_caller",
-                around_step = function(inner, _step_id, spec, ctx)
+                around_dispatch = function(inner, spec, ctx)
                     call_count = call_count + 1
                     local resp = inner(spec, ctx)
                     if call_count <= 3 then
