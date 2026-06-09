@@ -1,6 +1,6 @@
 {
   "schema_version": "hub_index/v0",
-  "updated_at": "2026-06-09T00:00:00Z",
+  "updated_at": "2026-06-09T09:50:38Z",
   "packages": [
     {
       "name": "combinator_demo",
@@ -48,11 +48,11 @@
       "best_card": null
     },
     {
-      "name": "verdict_loop_plugin",
-      "version": "0.1.0",
-      "description": "Swarm plugin that wraps a pipeline step with gate-verdict-fix-retry loop semantics (around_step + ctx.dispatch).",
-      "category": "frame_plugin",
-      "docstring": "verdict_loop_plugin is a Swarm plugin that wraps a pipeline step with gate-verdict-fix-retry loop semantics\n\nFor each attempt up to max_retries+1, dispatches the gate step via\naround_step inner(), evaluates the response with parser(), returns on\n\"pass\", calls ctx.dispatch(fix_spec) on \"blocked\" if fix_spec is\npresent, and returns an exhausted BLOCKED string after all attempts\nare consumed.\n\nUsage: M.create({ step_id, gate_spec, parser, fix_spec?, max_retries?, verdict_key? })\n\nStatus: v0.1.0",
+      "name": "swarm_frame_algocline",
+      "version": "0.3.0",
+      "description": "Token & Prompt round-trip primitive — routes prompts to flow.llm_bound (strict / format) or alc.llm directly (non-check), with format-mode post-verify for JSON-shape conformance.",
+      "category": "frame_primitive",
+      "docstring": "swarm_frame_algocline — Token & Prompt round-trip primitive.\n\nThin wrapper exposing a dispatcher that swarm_frame.run_linear (or\nany orch that wants the round-trip primitive) can use as\n`ctx.dispatcher`. The adapter does exactly three things:\n\n1. step_id_of(path)      — strip the path down to a step segment\n2. builder(step, spec)   — call the orch-supplied prompt builder\n3. route the prompt to alc.llm per `swarm_frame.check_mode()`:\n* \"strict\"     → through `flow.llm_bound` (token round-trip\n+ resume cue + echo verify, all owned by\nflow itself).\n* \"non-check\"  → straight to `alc.llm(prompt, llm_opts)`,\nno token round-trip. The direct-prompt\npattern, for one-shot prompts that do\nnot need session-spanning identity.\n* \"format\"     → through `flow.llm_bound` (same routing as\nstrict) AND post-verify that the response\nis a Pure JSON object on the first line\ncarrying `status` + `flow_token` +\n`flow_slot` fields, with `flow_slot`\nmatching the dispatched step. Format\nconformance becomes the identity proof.\nNon-conformant responses are translated\ninto a `BLOCKED reason=format-<detail>`\nverdict string so run_linear halts the\npipeline with a structured reason.\n\nDomain-shaped concerns — middleware chains, variant routing, shape\nvalidation, prompt-budget warnings, agentId extraction,\n`build_instruction_default` — live **above** this adapter in the\nconsuming orch (or in a plugin layered onto `make_dispatcher`). The\nadapter is intentionally ignorant of those concerns; it provides the\nToken & Prompt round-trip only and exposes plugin hooks\n(`before_dispatch` / `around_dispatch` / `after_dispatch` /\n`finalize`) for callers to layer the rest on top.\n\nStatus: v0.3.0 (Token & Prompt + format mode + resolve_task_dir + step lifecycle hooks).",
       "tags": null,
       "type": "library",
       "type_source": null,
@@ -63,11 +63,11 @@
       "best_card": null
     },
     {
-      "name": "swarm_frame_algocline",
-      "version": "0.2.0",
-      "description": "Token & Prompt round-trip primitive — routes prompts to flow.llm_bound (strict / format) or alc.llm directly (non-check), with format-mode post-verify for JSON-shape conformance.",
-      "category": "frame_primitive",
-      "docstring": "swarm_frame_algocline — Token & Prompt round-trip primitive.\n\nThin wrapper exposing a dispatcher that swarm_frame.run_linear (or\nany orch that wants the round-trip primitive) can use as\n`ctx.dispatcher`. The adapter does exactly three things:\n\n1. step_id_of(path)      — strip the path down to a step segment\n2. builder(step, spec)   — call the orch-supplied prompt builder\n3. route the prompt to alc.llm per `swarm_frame.check_mode()`:\n* \"strict\"     → through `flow.llm_bound` (token round-trip\n+ resume cue + echo verify, all owned by\nflow itself).\n* \"non-check\"  → straight to `alc.llm(prompt, llm_opts)`,\nno token round-trip. The direct-prompt\npattern, for one-shot prompts that do\nnot need session-spanning identity.\n* \"format\"     → through `flow.llm_bound` (same routing as\nstrict) AND post-verify that the response\nis a Pure JSON object on the first line\ncarrying `status` + `flow_token` +\n`flow_slot` fields, with `flow_slot`\nmatching the dispatched step. Format\nconformance becomes the identity proof.\nNon-conformant responses are translated\ninto a `BLOCKED reason=format-<detail>`\nverdict string so run_linear halts the\npipeline with a structured reason.\n\nDomain-shaped concerns — middleware chains, variant routing, shape\nvalidation, prompt-budget warnings, agentId extraction,\n`build_instruction_default` — live **above** this adapter in the\nconsuming orch (or in a plugin layered onto `make_dispatcher`). The\nadapter is intentionally ignorant of those concerns; it provides the\nToken & Prompt round-trip only and exposes plugin hooks\n(`before_dispatch` / `around_dispatch` / `after_dispatch` /\n`finalize`) for callers to layer the rest on top.\n\nStatus: v0.2.0 (Token & Prompt + format mode + resolve_task_dir).",
+      "name": "verdict_loop_plugin",
+      "version": "0.1.0",
+      "description": "Swarm plugin: wraps a pipeline step with gate-verdict-fix-retry loop semantics (around_step + ctx.dispatch). Dispatches gate, evaluates parser(resp, ctx), calls ctx.dispatch(fix_spec) on blocked, exhausts after max_retries+1 attempts.",
+      "category": "frame_plugin",
+      "docstring": "verdict_loop_plugin is a Swarm plugin that wraps a pipeline step with gate-verdict-fix-retry loop semantics\n\nImplements VerdictLoop: for each attempt up to max_retries+1, dispatch\nthe gate step, evaluate the response with parser(), return on \"pass\",\ncall ctx.dispatch(fix_spec) on \"blocked\" if fix_spec is present, and\nreturn an exhausted BLOCKED string after all attempts are consumed.\n\nThis plugin uses around_step + ctx.dispatch (Middle v0.3.0 primitives)\nand applies to a single declared step_id; all other steps pass through\ntransparently, enabling multiple instances to co-exist in opts.plugins.\n\nV1 coding_orch._verdict_loop 14 call-sites pattern is the reference.\n\nStatus: v0.1.0",
       "tags": null,
       "type": "library",
       "type_source": null,
