@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.10.0 (2026-06-14, additive)
+
+### Added — packages/swarm_state_method (new pkg)
+
+- `swarm_state_method.run({action = "update_dispatch_record", namespace, key, update})` — domain-aware state update verb composing the algocline >= v0.44.0 Alc MCP layer (`alc.state.show` + `alc.state.set_dispatched`) into a single business action callable via `alc_advice` without writing Lua on the spot
+- Initial verb `update_dispatch_record` — shallow-merge a patch into an existing record's `state.data` via show → merge → set_dispatched; preserves `identity` and non-overlapping data fields; returns `{ok, namespace, key, updated_fields[sorted]}`
+- `ensure_state_table` decode seam — absorbs the bridge return shape (JSON string in production vs table in `alc.state.show` docstring) by decoding through `alc.json_decode` when needed, while keeping mock injection (table-direct) intact for unit tests
+- `opts.alc` injection seam follows the `combinator_demo/init.lua:57` convention (production picks up `_G.alc`, tests pass a mocked table)
+
+### Added — packages/verdict_loop_plugin (new pkg)
+
+- `verdict_loop_plugin` — Swarm plugin wrapping a pipeline step with gate-verdict-fix-retry loop semantics on top of `around_step` + `ctx.dispatch` (swarm_frame_algocline v0.3.0 primitives)
+- Per attempt up to `max_retries + 1`: dispatch gate step → evaluate response with `parser()` → return on `"pass"` → call `ctx.dispatch(fix_spec)` on `"blocked"` if `fix_spec` is present → return exhausted BLOCKED string after all attempts
+- Applies to a single declared `step_id`; all other steps pass through transparently, so multiple instances can co-exist in `opts.plugins`
+- Reference pattern: V1 coding_orch `_verdict_loop` 14 call-sites
+
+### Added — swarm_frame_algocline (step lifecycle hooks + ctx.dispatch)
+
+- `before_step` / `around_step` / `after_step` plugin hooks on `make_dispatcher` — per-step lifecycle around the dispatcher round-trip
+- `ctx.dispatch(spec)` primitive — caller-triggered inner dispatch from inside `around_step`; enables retry / fallback / fix-loop patterns without leaking dispatcher state
+- Safeguard: bounded recursion depth (`max_recursion_depth`) on `ctx.dispatch` to prevent infinite fix loops
+
+### Internal
+
+- spec: `packages/swarm_state_method/spec/update_dispatch_record_spec.lua` (23 lust cases — entry-point validation / verb validation / decode / happy / opts.alc seam / meta)
+- `M.spec` carries `alc_shapes_compat = ">=0.25.0, <0.26"` and a stub `entries.run` skeleton (T.shape() detail deferred to a later minor)
+- spec: `packages/verdict_loop_plugin/spec/*.lua` — gate/fix dispatch chain + return shape + boundary cases
+- spec: `packages/swarm_frame_algocline/spec/dispatcher_spec.lua` `max_recursion_depth` test routed through `around_dispatch` (commit 6d35efa)
+- spec: lust import cleanup + `verdict_loop_plugin` assertion fix (commit 97a4ea8)
+- chore: `hub_index.json` regenerated after swarm_frame_algocline v0.3.0 bump (commit 672425e)
+- design: topic/plugin-verdict-loop-step-design tracked the 2-stage rollout (st1 → st2 → final)
+- Refs: `algocline/docs/state-management.md` (Phase C swarm package layer specification); cross-ref to algocline GH issue #6 (state primitive 2-layer split, Phase A + B shipped in algocline v0.44.0)
+
+### Bumped
+
+- `swarm_frame_algocline` v0.2.0 → v0.3.0 (minor additive — step lifecycle hooks + ctx.dispatch + safeguard)
+- `verdict_loop_plugin` 新規 v0.1.0
+- `swarm_state_method` 新規 v0.1.0
+- repo tag v0.9.0 → v0.10.0 (Hub collection bump trigger (a) — 2 new pkgs added)
+
 ## v0.9.0 (2026-06-02, additive)
 
 ### Added — swarm_frame (control-flow combinators)

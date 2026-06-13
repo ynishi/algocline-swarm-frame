@@ -132,16 +132,61 @@ and `alc_pkg_link` the `packages/` directory as shown in "Setup".
 
 ## Status
 
-v0.9.0. Frame core (`swarm_frame` v0.9.0) with control-flow combinators
-(sequence / loop / branch / verdict_loop) on top of the v0.8.0
-artifact store, ctx-aware gate routing, and Rich Verdict 2-layer
-separation. Token, Prompt, and task-dir resolver
-(`swarm_frame_algocline` v0.2.0). Swarm aggregate plugin
+v0.10.0. Frame core (`swarm_frame` v0.9.0) with control-flow
+combinators (sequence / loop / branch / verdict_loop) on top of the
+v0.8.0 artifact store, ctx-aware gate routing, and Rich Verdict
+2-layer separation. Token, Prompt, task-dir resolver, and step
+lifecycle hooks + `ctx.dispatch` primitive
+(`swarm_frame_algocline` v0.3.0). Swarm aggregate plugin
 (`swarm_aggregate_plugin` v0.1.0) bridging multi-agent debate (dmad /
 Du 2023) onto the dispatcher. Engine-level combinator demo
-(`combinator_demo` v0.1.0). Lua tests (335 cases) + mock smoke +
-real-LLM e2e (agent-block) all passing. Hub `hub_index.json` for
-`alc init` / `alc_hub_search` consumption.
+(`combinator_demo` v0.1.0). Verdict-loop step wrapper plugin
+(`verdict_loop_plugin` v0.1.0) — gate-verdict-fix-retry on top of
+`around_step` + `ctx.dispatch`. Domain-aware state update verbs
+(`swarm_state_method` v0.1.0) composing algocline's namespace-generic
+state primitive (Alc MCP layer in algocline >= v0.44.0) into
+business actions callable via `alc_advice`. Lua tests (358 cases) +
+mock smoke + real-LLM e2e (agent-block) all passing. Hub
+`hub_index.json` for `alc init` / `alc_hub_search` consumption.
+
+### Domain state update verbs (v0.10.0)
+
+`swarm_state_method` v0.1.0 lands the Swarm package layer of the
+algocline state primitive 2-layer split (`algocline/docs/state-management.md`
+§Phase C). It exposes domain verbs that compose the namespace-generic
+Alc MCP primitive (`alc.state.show` / `alc.state.set_dispatched`) into
+single business actions, callable directly through:
+
+```
+mcp__algocline__alc_advice
+  strategy=swarm_state_method
+  opts={"action":"update_dispatch_record", "namespace":"...", "key":"...", "update":{...}}
+```
+
+Initial verb:
+- `update_dispatch_record` — shallow-merges a patch into an existing
+  record's `state.data` via show → merge → set_dispatched; preserves
+  `identity` and non-overlapping data fields.
+
+The package absorbs the bridge return-shape variance (production
+`alc.state.show` returns a JSON string, the docstring described a
+table) through an `ensure_state_table` seam that decodes via
+`alc.json_decode` when needed and accepts table-direct returns from
+test mocks. The `opts.alc` injection seam follows
+`combinator_demo/init.lua:57`.
+
+### Step lifecycle hooks + ctx.dispatch (v0.10.0, same release)
+
+`swarm_frame_algocline` v0.3.0 adds `before_step` / `around_step` /
+`after_step` plugin hooks on `make_dispatcher`, plus a bounded
+`ctx.dispatch(spec)` primitive for caller-triggered inner dispatches
+from inside `around_step`. This unlocks retry / fallback / fix-loop
+patterns without leaking dispatcher state. The companion
+`verdict_loop_plugin` v0.1.0 wraps a pipeline step with
+gate-verdict-fix-retry loop semantics (V1 coding_orch
+`_verdict_loop` 14 call-sites is the reference pattern). Multiple
+instances co-exist in `opts.plugins` because each declares a single
+`step_id` and other steps pass through transparently.
 
 ### Control-flow combinators (v0.9.0)
 
