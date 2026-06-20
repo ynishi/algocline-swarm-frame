@@ -14,6 +14,29 @@ package.path = "./packages/?/init.lua;./packages/?.lua;"
     .. package.path
 
 local lust = require("lust")
+
+-- _G.alc bootstrap (must precede require("swarm_frame")). v0.10.0 removed
+-- the vendored pure_json / dkjson / cjson fallback chain so the runtime
+-- requires either M.host (DI seam) or _G.alc.json_* (algocline runtime)
+-- on every json_encode / json_decode call. The test process is not an
+-- algocline VM, so we install a minimal _G.alc shim here whose json_*
+-- uses dkjson when available and falls back to a permissive toy encoder.
+do
+    local ok_dkjson, dkjson = pcall(require, "dkjson")
+    local encode, decode
+    if ok_dkjson then
+        encode = dkjson.encode
+        decode = dkjson.decode
+    else
+        encode = function(t) return tostring(t) end
+        decode = function(s) return s end
+    end
+    _G.alc = _G.alc or {}
+    _G.alc.json_encode = _G.alc.json_encode or encode
+    _G.alc.json_decode = _G.alc.json_decode or decode
+    _G.alc.log = _G.alc.log or function() end
+end
+
 local frame = require("swarm_frame")
 local adapter = require("swarm_frame_algocline")
 
@@ -1272,7 +1295,9 @@ package.loaded["flow"] = {
     end,
     state_save = function() end,
 }
-_G.alc = { log = function() end }
+-- _G.alc was bootstrapped at the top of this file (json_encode / json_decode
+-- / log). No re-assignment here — tests that mutate _G.alc per-case do so
+-- inside their own before/after blocks.
 
 local v2 = require("bundled_base_curator")
 

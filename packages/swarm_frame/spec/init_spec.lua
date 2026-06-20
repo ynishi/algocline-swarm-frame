@@ -24,7 +24,7 @@ describe("swarm_frame core", function()
     -- ─── VERSION ─────────────────────────────────────────────────────────────
 
     describe("VERSION", function()
-        it("is 0.8.0", function() expect(frame.VERSION).to.equal("0.8.0") end)
+        it("is 0.10.0", function() expect(frame.VERSION).to.equal("0.10.0") end)
 
         it("meta.version matches VERSION", function() expect(frame.meta.version).to.equal(frame.VERSION) end)
     end)

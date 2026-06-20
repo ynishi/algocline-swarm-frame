@@ -10,13 +10,13 @@
 --- Schema-as-Data and the persistable-by-construction invariant are
 --- inherited from lshape. See design/design-doc.md for details.
 ---
---- Status: v0.9.0 (control-flow combinators: sequence / loop / branch / verdict_loop on top of v0.8.0
---- artifact_store + summarize). API surface is under verification through the bundled_base_curator_orch
---- rewrite.
+--- Status: v0.10.0 (JSON provider chain reduced to 2-step injection seam:
+--- M.host + _G.alc.json_*; legacy dkjson / cjson / vendored pure_json
+--- fallback removed — algocline runtime is now a hard requirement).
 
 local M = {}
 
-M.VERSION = "0.9.0"
+M.VERSION = "0.10.0"
 
 -- DI seam: inject a custom JSON host to override the auto-detect chain.
 -- Set to a table { encode = fn, decode = fn } before any JSON helper is
@@ -102,7 +102,7 @@ function M._reset_host_for_testing() M.host = nil end
 
 M.meta = {
     name = "swarm_frame",
-    version = "0.9.0",
+    version = "0.10.0",
     category = "frame",
     description = "Thin runtime for ProgramableSwarm — state container, "
         .. "session-key path registry, verdict parser, linear pipeline runner, "
@@ -112,13 +112,13 @@ M.meta = {
 
 -- ─── JSON helpers (preserves the lshape Persistable invariant) ───────────────
 --
--- host() resolves a JSON provider through a 5-step chain, in order:
---   1. M.host explicit injection (test or app override)
---   2. _G.alc.json_encode / _G.alc.json_decode (algocline engine VM)
---   3. dkjson (pure Lua, portable)
---   4. cjson (C extension fallback)
---   5. vendored pure_json (swarm_frame.pure_json, always present)
--- The chain must never be short-circuited to a single hard-wired provider.
+-- host() resolves a JSON provider through a 2-step injection seam, in order:
+--   1. M.host explicit injection (test or app override; DI seam for spec mocks)
+--   2. _G.alc.json_encode / _G.alc.json_decode (algocline engine VM; production)
+-- If neither is available the function raises — swarm_frame requires the
+-- algocline runtime (or an equivalent test override). The legacy
+-- dkjson / cjson / vendored pure_json fallback (v0.9.0 and earlier) was
+-- removed in v0.10.0; the back-compat break is intentional.
 
 local function host()
     if M.host then
@@ -134,11 +134,7 @@ local function host()
     then
         return { encode = _G.alc.json_encode, decode = _G.alc.json_decode }
     end
-    local ok, dkjson = pcall(require, "dkjson")
-    if ok then return { encode = dkjson.encode, decode = dkjson.decode } end
-    local ok2, cjson = pcall(require, "cjson")
-    if ok2 then return { encode = cjson.encode, decode = cjson.decode } end
-    return require("swarm_frame.pure_json")
+    error("swarm_frame: requires _G.alc.json_* (algocline runtime) or M.host injection", 2)
 end
 
 local function json_encode(t) return host().encode(t) end

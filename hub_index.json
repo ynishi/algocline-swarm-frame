@@ -1,6 +1,6 @@
 {
   "schema_version": "hub_index/v0",
-  "updated_at": "2026-06-13T17:28:35Z",
+  "updated_at": "2026-06-20T05:07:08Z",
   "packages": [
     {
       "name": "combinator_demo",
@@ -34,10 +34,10 @@
     },
     {
       "name": "swarm_frame",
-      "version": "0.9.0",
+      "version": "0.10.0",
       "description": "Thin runtime for ProgramableSwarm — state container, session-key path registry, verdict parser, linear pipeline runner, lshape 3-mode validation wrapper, and control-flow combinators (sequence / loop / branch / verdict_loop).",
       "category": "frame",
-      "docstring": "swarm_frame — Thin runtime for ProgramableSwarm.\n\nProvides the back-stage that user code never has to think about:\nstate container, session-key path registry, verdict parsing, linear\npipeline runner, and an lshape 3-mode validation wrapper. User code\nonly registers a spec (and optionally a handler) per session-key\npath; state operations, step bookkeeping, logging, and verdict\nhandling are confined to the frame.\n\nSchema-as-Data and the persistable-by-construction invariant are\ninherited from lshape. See design/design-doc.md for details.\n\nStatus: v0.9.0 (control-flow combinators: sequence / loop / branch / verdict_loop on top of v0.8.0\nartifact_store + summarize). API surface is under verification through the bundled_base_curator_orch\nrewrite.",
+      "docstring": "swarm_frame — Thin runtime for ProgramableSwarm.\n\nProvides the back-stage that user code never has to think about:\nstate container, session-key path registry, verdict parsing, linear\npipeline runner, and an lshape 3-mode validation wrapper. User code\nonly registers a spec (and optionally a handler) per session-key\npath; state operations, step bookkeeping, logging, and verdict\nhandling are confined to the frame.\n\nSchema-as-Data and the persistable-by-construction invariant are\ninherited from lshape. See design/design-doc.md for details.\n\nStatus: v0.10.0 (JSON provider chain reduced to 2-step injection seam:\nM.host + _G.alc.json_*; legacy dkjson / cjson / vendored pure_json\nfallback removed — algocline runtime is now a hard requirement).",
       "tags": null,
       "type": "library",
       "type_source": null,

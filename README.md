@@ -132,7 +132,7 @@ and `alc_pkg_link` the `packages/` directory as shown in "Setup".
 
 ## Status
 
-v0.10.0. Frame core (`swarm_frame` v0.9.0) with control-flow
+v0.11.0. Frame core (`swarm_frame` v0.10.0) with control-flow
 combinators (sequence / loop / branch / verdict_loop) on top of the
 v0.8.0 artifact store, ctx-aware gate routing, and Rich Verdict
 2-layer separation. Token, Prompt, task-dir resolver, and step

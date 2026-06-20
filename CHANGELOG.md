@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.11.0 (2026-06-20, breaking)
+
+### Changed — swarm_frame (JSON provider chain reduced to 2-step injection seam)
+
+- `swarm_frame` JSON provider chain shrunk from 5 steps to 2: (1) `M.host` explicit injection (DI seam for spec mocks) → (2) `_G.alc.json_encode/decode` (algocline runtime). If neither is available the resolver raises (`requires _G.alc.json_* (algocline runtime) or M.host injection`)
+- Same 2-step shrink in `swarm_frame.artifact_store` internal `_host()` (M.host not honoured at sub-module level — `_G.alc` only)
+
+### Removed — fallback providers (back-compat break)
+
+- `packages/swarm_frame/pure_json.lua` deleted (rxi/json.lua MIT vendor); the always-present fallback is no longer carried
+- `dkjson` / `cjson` `pcall(require, ...)` probes removed from both `swarm_frame/init.lua` and `swarm_frame/artifact_store.lua`
+- Pkgs that were ever executed outside the algocline runtime without an `M.host` override will now raise — intentional. Tests inject `M.host`, production uses `_G.alc.json_*` (alc_run / alc_pkg_test).
+
+### Internal
+
+- spec: `packages/swarm_frame/spec/host_seam_spec.lua` (c) `vendored pure_json fallback` block replaced with `missing host raises` (asserts `M.host=nil` + `_G.alc=nil` → `json_encode/decode` fail with `algocline runtime` message)
+- `swarm_frame` docstring Status line updated to v0.10.0
+
+### Bumped
+
+- `swarm_frame` v0.9.0 → v0.10.0 (minor, breaking — fallback chain removal)
+- repo tag v0.10.0 → v0.11.0 (Hub collection bump trigger (b) — existing pkg breaking change)
+
 ## v0.10.0 (2026-06-14, additive)
 
 ### Added — packages/swarm_state_method (new pkg)

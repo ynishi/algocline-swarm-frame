@@ -17,34 +17,34 @@ local M = {}
 
 -- ─── Internal json encode chain (circular require avoidance) ─────────────────
 --
--- Do NOT call require("swarm_frame") here — that would create a circular
--- dependency since init.lua requires this module at the bottom.
--- Instead, replicate the same host() detection chain directly.
-
-local _json_host = nil
+-- Do NOT eagerly call require("swarm_frame") here — that would create a
+-- circular dependency since init.lua requires this module at the bottom.
+-- Instead, look the parent module up lazily via package.loaded at call
+-- time so the DI seam (swarm_frame.host) is honoured the same way the
+-- init.lua resolver does. Resolution order:
+--   1. swarm_frame.host explicit injection (test or app override)
+--   2. _G.alc.json_encode / _G.alc.json_decode (algocline runtime)
+-- Otherwise raise — same contract as init.lua's host().
 
 local function _host()
-    if _json_host then return _json_host end
+    local sf = package.loaded["swarm_frame"]
+    if sf and sf.host then
+        if
+            type(sf.host) == "table"
+            and type(sf.host.encode) == "function"
+            and type(sf.host.decode) == "function"
+        then
+            return sf.host
+        end
+    end
     if
         type(_G.alc) == "table"
         and type(_G.alc.json_encode) == "function"
         and type(_G.alc.json_decode) == "function"
     then
-        _json_host = { encode = _G.alc.json_encode, decode = _G.alc.json_decode }
-        return _json_host
+        return { encode = _G.alc.json_encode, decode = _G.alc.json_decode }
     end
-    local ok, dkjson = pcall(require, "dkjson")
-    if ok then
-        _json_host = { encode = dkjson.encode, decode = dkjson.decode }
-        return _json_host
-    end
-    local ok2, cjson = pcall(require, "cjson")
-    if ok2 then
-        _json_host = { encode = cjson.encode, decode = cjson.decode }
-        return _json_host
-    end
-    _json_host = require("swarm_frame.pure_json")
-    return _json_host
+    error("swarm_frame.artifact_store: requires _G.alc.json_* (algocline runtime) or swarm_frame.host injection", 2)
 end
 
 local function _json_encode(t) return _host().encode(t) end
