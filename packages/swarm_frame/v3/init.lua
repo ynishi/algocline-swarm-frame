@@ -22,7 +22,7 @@ local composites = require("swarm_frame.v3.composites")
 local runtime = engine.runtime
 
 local M = {}
-M.VERSION = "0.0.1-v3-p3-min"
+M.VERSION = "0.0.2-v3-p5"
 
 -- ── Engine namespace (advanced: caller may compose plugin_chain etc.)
 M.engine = engine
@@ -32,6 +32,15 @@ M.contract = contract
 
 -- ── Composite library (verdict_loop / aggregate, V3 §5.8) ──────────
 M.composite = composites
+
+-- ── State semantics built-in (R5 land, §4.1.3 + §5.6.2) ────────────
+M.STATUS                      = runtime.STATUS
+M.step_mark                   = runtime.step_mark
+M.step_done                   = runtime.step_done
+M.gate_decide                 = runtime.gate_decide
+M.resolve_state               = runtime.resolve_state
+M.wrap_dispatch_with_progress = runtime.wrap_dispatch_with_progress
+M.make_checkpoint_plugin      = runtime.make_checkpoint_plugin
 
 -- ── Builder primitives (7) ──────────────────────────────────────────
 M.step  = shape.step

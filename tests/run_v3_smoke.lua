@@ -33,6 +33,7 @@ dofile("packages/swarm_frame/spec/v3_primitive_spec.lua")
 dofile("packages/swarm_frame/spec/v3_contract_spec.lua")
 dofile("packages/swarm_frame/spec/v3_composite_spec.lua")
 dofile("packages/swarm_frame/spec/v3_engine_spec.lua")
+dofile("packages/swarm_frame/spec/v3_state_spec.lua")
 
 local r = lust.get_results()
 print()

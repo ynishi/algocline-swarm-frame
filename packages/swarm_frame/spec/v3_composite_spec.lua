@@ -176,7 +176,7 @@ describe("swarm.composite.aggregate (e2e exec)", function()
                     return results[1] and results[1].r
                 end,
             },
-            state    = { candidates = { "alpha", "beta", "gamma" } },
+            ctx      = { candidates = { "alpha", "beta", "gamma" } },
         })
         expect(result.status).to.equal("ok")
         expect(result.ctx.consensus.said).to.equal("alpha")

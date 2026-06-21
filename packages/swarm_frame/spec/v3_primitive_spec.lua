@@ -218,7 +218,7 @@ describe("swarm.v3 e2e exec via flow.ir", function()
             shape    = shape,
             dispatch = function() return nil end,
             externs  = { double = function(x) return x * 2 end },
-            state    = { n = 21 },  -- ctx.* paths are syntactic; n lives at state root
+            ctx      = { n = 21 },  -- ctx.* paths are syntactic; n lives at ctx root
         })
         expect(result.status).to.equal("ok")
         expect(result.ctx.doubled).to.equal(42)
@@ -267,7 +267,7 @@ describe("swarm.v3 e2e exec via flow.ir", function()
         local result = swarm.run({
             shape    = shape,
             dispatch = function(_, input) return { got = input } end,
-            state    = { items = { "x", "y", "z" } },
+            ctx      = { items = { "x", "y", "z" } },
         })
         expect(result.status).to.equal("ok")
         expect(type(result.ctx.results)).to.equal("table")
