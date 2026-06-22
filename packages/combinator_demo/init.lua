@@ -1,14 +1,20 @@
---- combinator_demo — minimal verdict_loop demo for swarm_frame.
+--- combinator_demo — minimal verdict_loop pattern demo.
 ---
---- A 1-pkg illustration of `swarm_frame.verdict_loop`: ask the LLM to
+--- A 1-pkg illustration of the verdict_loop pattern: ask the LLM to
 --- answer a task, retry when the response does not contain a
 --- `\boxed{...}` marker. The parser is the only domain-aware piece
---- (Application policy); iteration and short-circuit live in the
---- Engine (mechanism).
+--- (Application policy); iteration and short-circuit are illustrated
+--- via an inline `for` loop (Engine mechanism).
 ---
---- Why a separate pkg: combinators are mechanism primitives, so the
---- usage shape is best demonstrated by a tiny consumer rather than
---- baked into a heavier algorithm pkg. Run paths:
+--- V3 P8 Phase 4 reframe (2026-06-22): 旧 swarm_frame.verdict_loop
+--- (combinators.lua re-export、 handler form `h(ctx) -> response`) は
+--- V3 で撤去済。 V3 では composites/verdict_loop.lua が IR Node form
+--- (`build(opts) -> Node`、 swarm.run 経由実行) で同等機能を提供する
+--- が、 educational demo として IR + dispatcher setup boilerplate を
+--- 避け、 inline for loop で「verdict_loop pattern」 を直接 illustrate
+--- する path に書直し済。 swarm_frame dependency 完全 drop。
+---
+--- Run paths:
 ---
 ---     just combinator-demo                # smoke (mock alc.llm)
 ---     just e2e combinator_demo            # real LLM via agent-block
@@ -40,13 +46,12 @@ local function require_pos_int(v, name, fn, default)
     return v
 end
 
---- Run a verdict_loop wrapping a single LLM gate.
+--- Run a verdict_loop wrapping a single LLM gate (inline for-loop form).
 ---
 --- @param opts {
 ---     task         : string,              -- REQUIRED
 ---     max_retries  : integer? (default 2),
----     alc          : table?  -- defaults to _G.alc; requires .llm,
----     frame        : table?  -- defaults to require("swarm_frame")
+---     alc          : table?  -- defaults to _G.alc; requires .llm
 --- }
 --- @return {
 ---     ok       : boolean,   -- final response contained \boxed{...}
@@ -59,46 +64,47 @@ function M.run(opts)
     require_string(opts.task, "task", "run")
     local max_retries = require_pos_int(opts.max_retries, "max_retries", "run", 2)
 
-    local frame = opts.frame or require("swarm_frame")
     local alc = opts.alc or _G.alc
     if type(alc) ~= "table" or type(alc.llm) ~= "function" then
         error("combinator_demo.run: alc.llm function required (set _G.alc or pass opts.alc)", 2)
     end
 
-    local attempts = 0
+    local parser = function(response)
+        return type(response) == "string" and response:find("\\boxed{", 1, true) ~= nil
+    end
 
-    local gate = function()
-        attempts = attempts + 1
+    -- Inline verdict_loop pattern: retry up to max_retries+1 times until
+    -- parser returns true. V3 P8 Phase 4 reframe (旧 frame.verdict_loop
+    -- handler form 撤去、 V3 IR-based composite は dispatcher setup 重く
+    -- educational demo に不適、 inline for loop が cleanest)。
+    local attempts = 0
+    local response
+    local ok = false
+    for attempt = 1, max_retries + 1 do
+        attempts = attempt
         local hint
-        if attempts == 1 then
+        if attempt == 1 then
             hint = "Wrap your final numeric answer in \\boxed{...}."
         else
             hint = string.format(
                 "Attempt %d: your previous answer did not contain \\boxed{...}. "
                     .. "Please wrap the number in \\boxed{...} this time.",
-                attempts
+                attempt
             )
         end
         local prompt = string.format("Task: %s\n\n%s", opts.task, hint)
-        return alc.llm(prompt)
+        response = alc.llm(prompt)
+        if parser(response) then
+            ok = true
+            break
+        end
     end
-
-    local parser = function(response) return type(response) == "string" and response:find("\\boxed{", 1, true) ~= nil end
-
-    local h = frame.verdict_loop({
-        gate = gate,
-        parser = parser,
-        max_retries = max_retries,
-    })
-
-    local ctx = { state = frame.state_new() }
-    local response = h(ctx)
 
     local boxed
     if type(response) == "string" then boxed = response:match("\\boxed{([^}]*)}") end
 
     return {
-        ok = parser(response),
+        ok = ok,
         attempts = attempts,
         response = response,
         boxed = boxed,

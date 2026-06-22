@@ -777,65 +777,15 @@ function M.validate(value, schema, ctx_hint, mode)
     end
 end
 
--- ─── plain_state sub-module (function-based peer of State) ─────────────────
+-- Legacy 5 sub-module (plain_state / normalize / artifact_store / combinators /
+-- combinator_shapes) は V3 P8 Phase 4 で撤去済 (本 commit)。 V3 contract /
+-- engine / composites (swarm_frame/v3/) + swarm_host_alc (state_backend /
+-- artifact_backend / state_method / prompt_builder / check_mode / safeguard /
+-- dispatcher) に置換、 active caller (V3 / swarm_host_alc) 影響なし
+-- (require 0 hit 確認済)。
 --
--- `swarm_frame.plain_state.{step_done, step_mark, log_phase}` mirrors
--- `State:step_done / :step_mark / :log_phase` as free functions over plain
--- Lua tables. Two surfaces, same primitives, two valid container shapes:
---
---   * `swarm_frame.State`        — opaque container, method form
---                                  (used by orchs that adopt `state_new`)
---   * `swarm_frame.plain_state`  — free functions over plain lists
---                                  (used by orchs on `flow.state_new`)
---
--- Neither is deprecated; the 13 agent-profiles orchs that stay on
--- `flow.state_new` consume `plain_state` without forcing a wholesale
--- container migration. See `swarm_frame/plain_state.lua` for the
--- migration-from-closures pattern.
-
-M.plain_state = require("swarm_frame.plain_state")
-
--- ─── normalize sub-module (entry-boundary type coercion) ───────────────────
---
--- `swarm_frame.normalize.{coerce_boolean, coerce_string, coerce_number,
--- coerce_table, normalize_ctx}` provides ctx-entry shape enforcement and
--- mlua JSON null sentinel sanitize. Peer of `plain_state` (not `validate`/
--- lshape: lshape is full Schema-as-Data, `normalize` is the narrow Lua-
--- type + sentinel idiom hoisted out of `coding_orch:737-788`). See
--- `swarm_frame/normalize.lua` for the migration pattern and
--- `design/normalize-primitive.md` for the discard re-evaluation rationale.
-
-M.normalize = require("swarm_frame.normalize")
-
--- ─── artifact_store sub-module ────────────────────────────────────────────────
---
--- `swarm_frame.artifact_store(backend)`     — store factory
--- `swarm_frame.backend_artifact_file(opts)` — FS backend (4-method contract)
--- `swarm_frame.backend_artifact_memory()`   — in-memory backend (4-method contract)
--- `swarm_frame.summarize(payload, opts)`    — standalone pure summary helper
-
-local _astore = require("swarm_frame.artifact_store")
-M.artifact_store = _astore.artifact_store
-M.backend_artifact_file = _astore.backend_artifact_file
-M.backend_artifact_memory = _astore.backend_artifact_memory
-M.summarize = _astore.summarize
-
--- ─── combinators sub-module (control flow primitives) ──────────────────────
---
--- `swarm_frame.sequence(opts)`     — linear chain of handlers
--- `swarm_frame.loop(opts)`         — bounded iteration with until_ predicate
--- `swarm_frame.branch(opts)`       — cond-based then_/else_ dispatch
--- `swarm_frame.verdict_loop(opts)` — gate + optional fix retry loop
---
--- Each returns a Handler (function(ctx, spec) -> response) that satisfies
--- the run_linear handler contract, so combinators nest naturally.
--- Schema definitions live in combinator_shapes.lua and are registered
--- under "SwarmFrame.*" names in lshape.check.default_registry.
-
-local _comb = require("swarm_frame.combinators")
-M.sequence = _comb.sequence
-M.loop = _comb.loop
-M.branch = _comb.branch
-M.verdict_loop = _comb.verdict_loop
+-- combinator_demo は inline for-loop pattern に書直し (= V3 IR-based composite
+-- は dispatcher setup 重く educational demo に不適、 swarm_frame dependency
+-- 完全 drop)。
 
 return M
