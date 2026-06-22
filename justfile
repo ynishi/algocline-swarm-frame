@@ -2,8 +2,9 @@
 #
 # Usage:
 #   just                  -> list recipes
-#   just test             -> run V3 standalone runner (333 testcase, no LLM)
+#   just test             -> run V3 standalone runner (no LLM)
 #   just combinator-demo  -> mock-LLM example (verdict_loop retry, no API key)
+#   just swarm-demo       -> mock-LLM example (3-Agent linear Swarm, no API key)
 #   just conway-spike     -> Conway GoL Primitive spike
 #   just ga-spike         -> GA Primitive spike
 #   just market-spike     -> Market Primitive spike
@@ -34,6 +35,14 @@ test:
 # required.
 combinator-demo:
     lua examples/combinator_demo.lua
+
+# Mock-LLM example for the 3-Agent linear Swarm pattern: drives
+# swarm_demo.run() with a deterministic mock that returns canned
+# Researcher / Drafter / Reviewer responses. Proves three
+# swarm_host_alc.dispatcher instances chain linearly with prompt
+# threading. No API key required.
+swarm-demo:
+    lua examples/swarm_demo.lua
 
 # Conway GoL Primitive spike (umbrella 1779690943-76260 §9 (iv)).
 # 5x5 grid + glider + 5 generations, composed from 3 Pure Primitives:
