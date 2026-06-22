@@ -1,6 +1,6 @@
 {
   "schema_version": "hub_index/v0",
-  "updated_at": "2026-06-22T02:28:37Z",
+  "updated_at": "2026-06-22T04:13:21Z",
   "packages": [
     {
       "name": "combinator_demo",
@@ -8,21 +8,6 @@
       "description": "Minimal verdict_loop demo: ask LLM for \\\\boxed{N}, retry on missing marker.",
       "category": "frame_example",
       "docstring": "combinator_demo — minimal verdict_loop demo for swarm_frame.\n\nA 1-pkg illustration of `swarm_frame.verdict_loop`: ask the LLM to\nanswer a task, retry when the response does not contain a\n`\\boxed{...}` marker. The parser is the only domain-aware piece\n(Application policy); iteration and short-circuit live in the\nEngine (mechanism).\n\nWhy a separate pkg: combinators are mechanism primitives, so the\nusage shape is best demonstrated by a tiny consumer rather than\nbaked into a heavier algorithm pkg. Run paths:\n\njust combinator-demo                # smoke (mock alc.llm)\njust e2e combinator_demo            # real LLM via agent-block\n\nBoth drive `M.run({ task = ..., max_retries = N })`.",
-      "tags": null,
-      "type": "runnable",
-      "type_source": null,
-      "source": {
-        "type": "unknown"
-      },
-      "card_count": 0,
-      "best_card": null
-    },
-    {
-      "name": "swarm_aggregate_plugin",
-      "version": "0.1.0",
-      "description": "Swarm aggregate plugin bridging dmad / moa / reconcile to swarm_frame_algocline.make_dispatcher (initial: dmad only).",
-      "category": "frame_plugin",
-      "docstring": "swarm_aggregate_plugin — Swarm aggregate plugin for swarm_frame.\n\nBridges Swarm-style multi-agent aggregation packages\n(algocline-bundled-packages: dmad / moa / reconcile, ...) onto\n`swarm_frame_algocline.make_dispatcher`.\n\nThe bundled pkgs each export their algorithm as `M.run(ctx)` plus a\nhandful of LLM-independent pure helpers\n(`build_*_prompt` / `extract_*` / `aggregate_*`). This plugin reuses\nthose helpers but **routes every LLM call through the dispatcher**\nso the Frame's plugin chain (before / around / after / finalize)\nand its check_mode-aware routing primitive (route_llm) own the\nround-trip discipline.\n\nInitial release (v0.1.0): dmad only. moa / reconcile / hegelian\nextension is anticipated under the same `M.run_<pkg>(opts)`\nconvention but not yet implemented.",
       "tags": null,
       "type": "runnable",
       "type_source": null,
@@ -48,41 +33,11 @@
       "best_card": null
     },
     {
-      "name": "swarm_frame_algocline",
-      "version": "0.3.0",
-      "description": "Token & Prompt round-trip primitive — routes prompts to flow.llm_bound (strict / format) or alc.llm directly (non-check), with format-mode post-verify for JSON-shape conformance.",
-      "category": "frame_primitive",
-      "docstring": "swarm_frame_algocline — Token & Prompt round-trip primitive.\n\nThin wrapper exposing a dispatcher that swarm_frame.run_linear (or\nany orch that wants the round-trip primitive) can use as\n`ctx.dispatcher`. The adapter does exactly three things:\n\n1. step_id_of(path)      — strip the path down to a step segment\n2. builder(step, spec)   — call the orch-supplied prompt builder\n3. route the prompt to alc.llm per `swarm_frame.check_mode()`:\n* \"strict\"     → through `flow.llm_bound` (token round-trip\n+ resume cue + echo verify, all owned by\nflow itself).\n* \"non-check\"  → straight to `alc.llm(prompt, llm_opts)`,\nno token round-trip. The direct-prompt\npattern, for one-shot prompts that do\nnot need session-spanning identity.\n* \"format\"     → through `flow.llm_bound` (same routing as\nstrict) AND post-verify that the response\nis a Pure JSON object on the first line\ncarrying `status` + `flow_token` +\n`flow_slot` fields, with `flow_slot`\nmatching the dispatched step. Format\nconformance becomes the identity proof.\nNon-conformant responses are translated\ninto a `BLOCKED reason=format-<detail>`\nverdict string so run_linear halts the\npipeline with a structured reason.\n\nDomain-shaped concerns — middleware chains, variant routing, shape\nvalidation, prompt-budget warnings, agentId extraction,\n`build_instruction_default` — live **above** this adapter in the\nconsuming orch (or in a plugin layered onto `make_dispatcher`). The\nadapter is intentionally ignorant of those concerns; it provides the\nToken & Prompt round-trip only and exposes plugin hooks\n(`before_dispatch` / `around_dispatch` / `after_dispatch` /\n`finalize`) for callers to layer the rest on top.\n\nStatus: v0.3.0 (Token & Prompt + format mode + resolve_task_dir + step lifecycle hooks).",
-      "tags": null,
-      "type": "library",
-      "type_source": null,
-      "source": {
-        "type": "unknown"
-      },
-      "card_count": 0,
-      "best_card": null
-    },
-    {
       "name": "swarm_host_alc",
       "version": "frame",
       "description": "Host adapter for swarm_frame V3 runtime, scoped to algocline (state_backend / artifact_backend / state_method / prompt_builder / check_mode / dispatcher).",
       "category": "frame",
       "docstring": "@module 'swarm_host_alc'",
-      "tags": null,
-      "type": "library",
-      "type_source": null,
-      "source": {
-        "type": "unknown"
-      },
-      "card_count": 0,
-      "best_card": null
-    },
-    {
-      "name": "verdict_loop_plugin",
-      "version": "0.1.0",
-      "description": "Swarm plugin: wraps a pipeline step with gate-verdict-fix-retry loop semantics (around_step + ctx.dispatch). Dispatches gate, evaluates parser(resp, ctx), calls ctx.dispatch(fix_spec) on blocked, exhausts after max_retries+1 attempts.",
-      "category": "frame_plugin",
-      "docstring": "verdict_loop_plugin is a Swarm plugin that wraps a pipeline step with gate-verdict-fix-retry loop semantics\n\nImplements VerdictLoop: for each attempt up to max_retries+1, dispatch\nthe gate step, evaluate the response with parser(), return on \"pass\",\ncall ctx.dispatch(fix_spec) on \"blocked\" if fix_spec is present, and\nreturn an exhausted BLOCKED string after all attempts are consumed.\n\nThis plugin uses around_step + ctx.dispatch (Middle v0.3.0 primitives)\nand applies to a single declared step_id; all other steps pass through\ntransparently, enabling multiple instances to co-exist in opts.plugins.\n\nV1 coding_orch._verdict_loop 14 call-sites pattern is the reference.\n\nStatus: v0.1.0",
       "tags": null,
       "type": "library",
       "type_source": null,
