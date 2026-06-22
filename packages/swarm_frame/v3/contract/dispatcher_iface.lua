@@ -13,7 +13,7 @@
 
 local T = require("alc_shapes.t")
 local M = {}
-M.VERSION = "0.0.1-v3-p4"
+M.VERSION = "0.0.2-v3-p5"
 
 --- Input shape passed by the runtime to the dispatcher.
 --- per R8 land (V3 §5.3.1): `input` MAY be nil when step.in_ is omitted.
@@ -29,12 +29,21 @@ M.DispatchInput = T.shape({
 M.DispatchResponse = T.shape({}, { open = true })
 
 --- Light contract probe — verifies the dispatcher is callable.
---- Returns `true` or `(nil, reason)`.
+---
+--- Accepts both plain functions AND callable tables (= tables with a
+--- `__call` metamethod). swarm_host_alc.dispatcher returns a callable
+--- table from `setmetatable({extras, plugins, finalize, writes}, {__call=...})`
+--- so the dispatcher_iface contract must accept both shapes (V3 #8b).
+---
+--- Returns `true` or `(false, reason)`.
 function M.check_call(fn)
-    if type(fn) ~= "function" then
-        return false, "dispatcher must be a function (ref, input) -> response"
+    if type(fn) == "function" then return true end
+    if type(fn) == "table" then
+        local mt = getmetatable(fn)
+        if mt and type(mt.__call) == "function" then return true end
     end
-    return true
+    return false, "dispatcher must be a function or callable table "
+        .. "(ref, input) -> response"
 end
 
 return M
