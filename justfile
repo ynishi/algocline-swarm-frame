@@ -5,6 +5,7 @@
 #   just test             -> run V3 standalone runner (no LLM)
 #   just combinator-demo  -> mock-LLM example (verdict_loop retry, no API key)
 #   just swarm-demo       -> mock-LLM example (3-Agent linear Swarm, no API key)
+#   just swarm-composite-demo -> declarative IR + composite library demo (no API key)
 #   just conway-spike     -> Conway GoL Primitive spike
 #   just ga-spike         -> GA Primitive spike
 #   just market-spike     -> Market Primitive spike
@@ -43,6 +44,15 @@ combinator-demo:
 # threading. No API key required.
 swarm-demo:
     lua examples/swarm_demo.lua
+
+# Companion to swarm-demo: illustrates the *declarative* IR +
+# composite path (swarm_frame composite library + 7 primitives) for
+# the same domain. Path 1 walks chain(3 steps) with ctx threading via
+# step.out; Path 2 demonstrates verdict_loop retry until until_token.
+# Stays at the engine layer (no swarm_host_alc.dispatcher used). No
+# API key required.
+swarm-composite-demo:
+    lua examples/swarm_composite_demo.lua
 
 # Conway GoL Primitive spike.
 # 5x5 grid + glider + 5 generations, composed from 3 Pure Primitives:
