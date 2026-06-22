@@ -2,9 +2,13 @@
 #
 # Usage:
 #   just                  -> list recipes
-#   just test             -> run all Lua tests (pure, no LLM)
-#   just smoke            -> run mock-LLM example (no API key needed)
-#   just check            -> lshape schema self-check on swarm_frame contracts
+#   just test             -> run V3 standalone runner (333 testcase, no LLM)
+#   just combinator-demo  -> mock-LLM example (verdict_loop retry, no API key)
+#   just conway-spike     -> Conway GoL Primitive spike
+#   just ga-spike         -> GA Primitive spike
+#   just market-spike     -> Market Primitive spike
+#   just pd-spike         -> PD Primitive spike
+#   just arena-spike      -> Arena Primitive spike
 #   just e2e <name>       -> run real-LLM end-to-end via agent-block
 #   just e2e-all          -> run every E2E under scripts/e2e/
 #
@@ -17,19 +21,11 @@
 default:
     @just --list
 
-# Pure-Lua test suite (mock host, no LLM, no network).
+# V3 standalone runner (333 testcase: sub-module + factory seam + integration).
+# Pure-Lua, no LLM, no network. Sole test runner after V3 P8 cleanup —
+# 旧 tests/run.lua (swarm_frame_algocline-based) は P8 Phase 2 で撤去済。
 test:
     lua tests/run.lua
-
-# lshape schema self-check on swarm_frame contracts.
-check:
-    LSHAPE_CHECK=1 lua tests/run.lua
-
-# Mock-LLM example: drives swarm_aggregate_plugin.run_dmad through a
-# deterministic in-process mock alc.llm. Verifies the dispatcher chain
-# end-to-end without any external dependency. No API key required.
-smoke:
-    lua examples/swarm_aggregate_dmad.lua
 
 # Mock-LLM example for the Engine combinators: drives combinator_demo
 # (verdict_loop wrapping a single alc.llm gate) with a deterministic
@@ -125,12 +121,3 @@ clean:
 dist:
     @echo "Use the algocline MCP tool: alc_hub_dist source_dir=./packages output_path=./hub_index.json"
     @echo "(direct CLI invocation is not yet exposed; reindex result lands at ./hub_index.json)"
-
-# Run spec/ tests via the algocline MCP tool (alc_pkg_test).
-# alc is an MCP server binary, not a CLI — this recipe only documents
-# the MCP invocation. Run the actual tests by invoking the MCP tool from
-# a Claude Code / agent session.
-test-spec:
-    @echo "Use the algocline MCP tool: alc_pkg_test pkg=swarm_frame"
-    @echo "                            alc_pkg_test pkg=swarm_frame_algocline"
-    @echo "                            alc_pkg_test pkg=swarm_aggregate_plugin"
