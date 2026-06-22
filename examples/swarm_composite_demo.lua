@@ -1,23 +1,22 @@
 --- examples/swarm_composite_demo.lua — V3 composite + IR pipeline demo.
 ---
---- Companion to examples/swarm_demo.lua (raw 3-dispatcher form).
 --- This sample illustrates the **declarative IR + composite** path:
 --- the pipeline shape is expressed as data (`swarm.chain({step, step,
 --- ...})`) and `swarm.run({shape, dispatch})` walks the IR, invoking
---- `dispatch(ref, input, ctx)` per step. Same domain (3-Agent linear)
---- as swarm_demo.lua, written in the engine-native form.
+--- `dispatch(ref, input, ctx)` per step. Domain: 3-Agent linear
+--- (Researcher → Drafter → Reviewer) in engine-native form.
 ---
 --- Two paths are illustrated:
 ---   1. chain (3 steps linear, ctx threading via step.out)
 ---   2. verdict_loop composite (retry pattern, single step + until_)
 ---
---- Why this sample exists (companion to swarm_demo.lua):
 --- swarm_frame V3 already provides a "base pipeline frame" via the
---- composite library (verdict_loop / aggregate) + the 7 primitives
---- (chain / fan / loop / route / let / step / call). This demo proves
---- you can author full pipelines as IR data, with dispatcher
---- complexity (e.g. swarm_host_alc.dispatcher) plugged in at the
---- `dispatch` seam — no extra Agent-spec layer required.
+--- composite library (verdict_loop / aggregate / enhance_loop /
+--- escalate_gate) + the 7 primitives (chain / fan / loop / route /
+--- let / step / call). This demo proves you can author full pipelines
+--- as IR data, with dispatcher complexity (e.g. swarm_host_alc.dispatcher)
+--- plugged in at the `dispatch` seam — no extra Agent-spec layer
+--- required.
 ---
 --- Run (no API key needed):
 ---     lua examples/swarm_composite_demo.lua
@@ -183,6 +182,6 @@ print("  - Path 1: chain(3 steps) walked declaratively, ctx threading via step.o
 print("  - Path 2: verdict_loop retry until until_token, capped by max")
 print("")
 print("Note: This sample stays at the engine layer (no swarm_host_alc.")
-print("dispatcher used). For the real-LLM round-trip path, see")
-print("examples/swarm_demo.lua + scripts/e2e/swarm_demo.lua, which plug")
-print("swarm_host_alc.dispatcher into the same composite/IR seam.")
+print("dispatcher used). For the real-LLM round-trip path, plug")
+print("swarm_host_alc.dispatcher into the `dispatch` seam exposed by")
+print("swarm.run({shape, dispatch}).")

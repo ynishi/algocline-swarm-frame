@@ -778,14 +778,10 @@ function M.validate(value, schema, ctx_hint, mode)
 end
 
 -- Legacy 5 sub-module (plain_state / normalize / artifact_store / combinators /
--- combinator_shapes) は V3 P8 Phase 4 で撤去済 (本 commit)。 V3 contract /
+-- combinator_shapes) は V3 P8 Phase 4 で撤去済。 V3 contract /
 -- engine / composites (swarm_frame/v3/) + swarm_host_alc (state_backend /
 -- artifact_backend / state_method / prompt_builder / check_mode / safeguard /
 -- dispatcher) に置換、 active caller (V3 / swarm_host_alc) 影響なし
 -- (require 0 hit 確認済)。
---
--- combinator_demo は inline for-loop pattern に書直し (= V3 IR-based composite
--- は dispatcher setup 重く educational demo に不適、 swarm_frame dependency
--- 完全 drop)。
 
 return M

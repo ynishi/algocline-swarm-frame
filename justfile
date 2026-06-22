@@ -3,9 +3,8 @@
 # Usage:
 #   just                  -> list recipes
 #   just test             -> run V3 standalone runner (no LLM)
-#   just combinator-demo  -> mock-LLM example (verdict_loop retry, no API key)
-#   just swarm-demo       -> mock-LLM example (3-Agent linear Swarm, no API key)
 #   just swarm-composite-demo -> declarative IR + composite library demo (no API key)
+#   just verdict-swarm-pipeline -> reusable 7-step verdict-driven pipeline smoke (no API key)
 #   just conway-spike     -> Conway GoL Primitive spike
 #   just ga-spike         -> GA Primitive spike
 #   just market-spike     -> Market Primitive spike
@@ -29,30 +28,25 @@ default:
 test:
     lua tests/run.lua
 
-# Mock-LLM example for the Engine combinators: drives combinator_demo
-# (verdict_loop wrapping a single alc.llm gate) with a deterministic
-# mock that fails the parser twice then passes on attempt 3. Proves
-# verdict_loop retry + short-circuit semantics end-to-end. No API key
-# required.
-combinator-demo:
-    lua examples/combinator_demo.lua
-
-# Mock-LLM example for the 3-Agent linear Swarm pattern: drives
-# swarm_demo.run() with a deterministic mock that returns canned
-# Researcher / Drafter / Reviewer responses. Proves three
-# swarm_host_alc.dispatcher instances chain linearly with prompt
-# threading. No API key required.
-swarm-demo:
-    lua examples/swarm_demo.lua
-
-# Companion to swarm-demo: illustrates the *declarative* IR +
-# composite path (swarm_frame composite library + 7 primitives) for
-# the same domain. Path 1 walks chain(3 steps) with ctx threading via
-# step.out; Path 2 demonstrates verdict_loop retry until until_token.
-# Stays at the engine layer (no swarm_host_alc.dispatcher used). No
-# API key required.
+# Declarative IR + composite library demo: illustrates the
+# composite path (swarm_frame composite library + 7 primitives).
+# Path 1 walks chain(3 steps) with ctx threading via step.out; Path 2
+# demonstrates verdict_loop retry until until_token. Stays at the engine
+# layer (no swarm_host_alc.dispatcher used). No API key required.
 swarm-composite-demo:
     lua examples/swarm_composite_demo.lua
+
+# Reusable verdict-driven swarm pipeline smoke. 7 step shape
+# (S1 plan / S2 enhance_loop / S3 aggregate / S4 draft / S5 enhance_loop
+# / S6 escalate_gate / S7 finalize). All prompts / dispatch / refs /
+# externs are injected by the caller (= examples/verdict_swarm_pipeline.lua).
+# The pkg owns only the shape factory + run wrapper + decision injection
+# helper. Exercises: caller-injected dispatch, fix_carry retry,
+# panel aggregate, escalate halt, resume (top-level short-circuit) plus
+# a 3rd run demonstrating per-role ref swap (@plan → @plan_v2).
+# No API key required.
+verdict-swarm-pipeline:
+    lua examples/verdict_swarm_pipeline.lua
 
 # Conway GoL Primitive spike.
 # 5x5 grid + glider + 5 generations, composed from 3 Pure Primitives:

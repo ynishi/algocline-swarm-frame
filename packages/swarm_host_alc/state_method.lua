@@ -12,9 +12,8 @@
 -- `state.data`, and writes back via `alc.state.set_dispatched` (Phase B
 -- explicit-namespace set).
 --
--- The `opts.alc` injection seam follows the convention established by
--- `combinator_demo/init.lua`: production picks up `_G.alc`, tests pass
--- a mocked table.
+-- The `opts.alc` injection seam follows the convention of picking up
+-- `_G.alc` in production while letting tests pass a mocked table.
 
 -- alc_shapes is optional: used for type annotation stubs only.
 local _S_ok, S = pcall(require, "alc_shapes")

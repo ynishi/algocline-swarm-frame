@@ -214,6 +214,58 @@ describe("swarm.v3.engine.state.wrap_dispatch_with_progress (R5 land 軸 5)", fu
         local ok = pcall(state.wrap_dispatch_with_progress, nil, {})
         expect(ok).to.equal(false)
     end)
+
+    -- ─── β land: flow.ir.path 互換 at-path ──────────────────────────
+    it("resolves at-path with 'ctx.' prefix (flow.ir.path form)", function()
+        local hits = 0
+        local d = function() hits = hits + 1; return "fresh" end
+        local ctx = {
+            last = "cached_via_ctx_prefix",
+            _progress = { ["@gate"] = { status = "done", at = "ctx.last" } },
+        }
+        local w = state.wrap_dispatch_with_progress(d, ctx)
+        local r = w("@gate")
+        expect(hits).to.equal(0)
+        expect(r).to.equal("cached_via_ctx_prefix")
+    end)
+
+    it("resolves at-path with bracket index segments", function()
+        local ctx = {
+            items = { "first", "second", "third" },
+            _progress = { ["@idx"] = { status = "done", at = "ctx.items[2]" } },
+        }
+        local d = function() return "fresh" end
+        local w = state.wrap_dispatch_with_progress(d, ctx)
+        expect(w("@idx")).to.equal("second")
+    end)
+
+    -- ─── β land: auto step_done POST hook ───────────────────────────
+    it("auto-writes _progress on dispatch when step_out_map provided", function()
+        local d = function() return { verdict = "pass" } end
+        local ctx = { _progress = {} }
+        local step_out_map = { ["@gate"] = "ctx.last" }
+        local w = state.wrap_dispatch_with_progress(d, ctx, step_out_map)
+        w("@gate", nil)
+        expect(ctx._progress["@gate"]).to.exist()
+        expect(ctx._progress["@gate"].status).to.equal("done")
+        expect(ctx._progress["@gate"].at).to.equal("ctx.last")
+    end)
+
+    it("does not auto-write _progress when step_out_map omitted (backward compat)", function()
+        local d = function() return { verdict = "pass" } end
+        local ctx = { _progress = {} }
+        local w = state.wrap_dispatch_with_progress(d, ctx)
+        w("@gate", nil)
+        expect(ctx._progress["@gate"]).to.equal(nil)
+    end)
+
+    it("does not auto-write when step_out_map has no entry for step_id", function()
+        local d = function() return "x" end
+        local ctx = { _progress = {} }
+        local w = state.wrap_dispatch_with_progress(d, ctx, { ["@other"] = "ctx.other" })
+        w("@gate")
+        expect(ctx._progress["@gate"]).to.equal(nil)
+    end)
 end)
 
 -- ─── checkpoint plugin (V3 §6.2.5 強制注入) ─────────────────────────
@@ -381,5 +433,65 @@ describe("swarm.v3 runtime.run with state_backend", function()
         expect(r.status).to.equal("ok")
         expect(r.ctx.z).to.equal(7)
         expect(r.task_id).to.exist()
+    end)
+end)
+
+-- ─── escalate_required → INTERRUPTED (P9 escalate_gate land) ─────────
+
+describe("swarm.v3 runtime.run escalate path (P9 land)", function()
+    it("maps __escalate__ raise to error.kind=escalate_required", function()
+        local shape = swarm.let("ctx._void",
+            swarm.ext("__escalate__", { swarm.lit({}) }))
+        local r = swarm.run({
+            shape    = shape,
+            dispatch = function() return nil end,
+        })
+        expect(r.status).to.equal("error")
+        expect(r.error.kind).to.equal("escalate_required")
+        expect(r.error.message:find("escalate:")).to.exist()
+    end)
+
+    it("writes STATUS.INTERRUPTED on escalate_required", function()
+        local b = make_backend()
+        local shape = swarm.let("ctx._void",
+            swarm.ext("__escalate__", { swarm.lit({}) }))
+        local r = swarm.run({
+            shape         = shape,
+            dispatch      = function() return nil end,
+            state_backend = b,
+            state         = { task_id = "t-esc" },
+        })
+        expect(r.status).to.equal("error")
+        expect(r.error.kind).to.equal("escalate_required")
+        expect(b.store["t-esc"].status).to.equal("interrupted")
+    end)
+
+    it("resolves INTERRUPTED state to resume mode (escalate carry)", function()
+        local b = make_backend()
+        b.store["t-esc-resume"] = {
+            status = "interrupted",
+            ctx    = {
+                last = { verdict = "blocked", body = "halted output" },
+                _progress = { ["@gate"] = { status = "done", at = "ctx.last" } },
+            },
+        }
+        local r = state.resolve(b, { task_id = "t-esc-resume" })
+        expect(r.mode).to.equal("resume")
+        expect(r.ctx.last.verdict).to.equal("blocked")
+    end)
+
+    it("caller-supplied __escalate__ overrides the built-in", function()
+        local seen
+        local shape = swarm.let("ctx._void",
+            swarm.ext("__escalate__", { swarm.lit("payload") }))
+        local r = swarm.run({
+            shape    = shape,
+            dispatch = function() return nil end,
+            externs  = {
+                __escalate__ = function(p) seen = p; return "noop" end,
+            },
+        })
+        expect(r.status).to.equal("ok")
+        expect(seen).to.equal("payload")
     end)
 end)

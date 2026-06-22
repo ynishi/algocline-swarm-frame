@@ -7,8 +7,10 @@
 -- engine-internal — host adapters supply only persistence backends
 -- via /contract/state_backend_iface.
 
+local path_mod = require("flow.ir.path")
+
 local M = {}
-M.VERSION = "0.0.1-v3-p5"
+M.VERSION = "0.0.2-v3-p9"
 
 -- ─── status 5 値 (R5 land 軸 1) ─────────────────────────────────────
 
@@ -153,30 +155,84 @@ end
 -- downstream layers update progress on completion (handled by the
 -- checkpoint plugin).
 
+-- lookup_at_path: resolve an at-path against `ctx`.
+--
+-- Accepts BOTH conventions:
+--   • flow.ir.path form: "ctx.last" / "ctx.items[3]" — first segment "ctx"
+--     is the write_path root token and is stripped before walking.
+--   • ctx-relative form (legacy): "last" / "scout" — walked literally
+--     from `ctx`. Preserves existing callers that wrote at-paths without
+--     the "ctx." prefix.
+--
+-- Integer bracket indices ([N]) are supported via path_mod.parse.
 local function lookup_at_path(ctx, at_path)
     if type(at_path) ~= "string" or at_path == "" then return nil end
+    local parts = path_mod.parse(at_path)
+    if type(parts) ~= "table" or #parts == 0 then return nil end
+    local start_idx = 1
+    if parts[1] == "ctx" then start_idx = 2 end
     local node = ctx
-    for seg in tostring(at_path):gmatch("[^%.]+") do
+    for i = start_idx, #parts do
         if type(node) ~= "table" then return nil end
-        node = node[seg]
+        node = node[parts[i]]
     end
     return node
 end
 
-function M.wrap_dispatch_with_progress(dispatch, ctx)
+-- wrap_dispatch_with_progress(dispatch, ctx, step_out_map?, resumed_done?)
+--
+-- Bi-directional wrapper:
+--   1. PRE  short-circuit:
+--      • If `resumed_done` is provided (recommended path), short-circuit
+--        only on entries snapshotted from a PRIOR run's _progress at the
+--        start of this run. The lookup is one-shot: a successful
+--        short-circuit clears the entry, so a loop or repeated step
+--        re-dispatches on subsequent invocations. This isolates resume
+--        semantics from in-run loop iterations.
+--      • If `resumed_done` is nil (legacy path, kept for direct callers),
+--        fall back to checking ctx._progress[step_id] directly with no
+--        one-shot consume. Loops with the same step ref will short-circuit
+--        on iter 2+ if iter 1 wrote _progress — caller's responsibility.
+--   2. POST auto-write:
+--      • After a fresh dispatch, if step_out_map contains an entry for
+--        step_id, auto-write ctx._progress[step_id] = {status="done",
+--        at=<out_path>}. This makes future-run resume idempotent — the
+--        next runtime.run() will populate its own resumed_done from this
+--        snapshot. Loops are safe because the snapshot is captured at run
+--        start, not consulted live.
+--
+-- step_out_map / resumed_done are both optional (backward compat).
+function M.wrap_dispatch_with_progress(dispatch, ctx, step_out_map, resumed_done)
     if type(dispatch) ~= "function" then
         error("state.wrap_dispatch_with_progress: dispatch must be a function", 2)
     end
     return function(ref, input, dispatch_ctx)
         local step_id = (type(dispatch_ctx) == "table" and dispatch_ctx.step_id)
                         or ref
-        local prog = ctx._progress and ctx._progress[step_id]
-        if prog and prog.status == "done" then
-            local cached = lookup_at_path(ctx, prog.at)
+        local at_path = nil
+        if type(resumed_done) == "table" then
+            -- new strict mode: prior-run entry, one-shot consume
+            at_path = resumed_done[step_id]
+            if at_path then resumed_done[step_id] = nil end
+        else
+            -- legacy mode: live ctx._progress lookup
+            local prog = ctx._progress and ctx._progress[step_id]
+            if prog and prog.status == "done" then at_path = prog.at end
+        end
+        if at_path then
+            local cached = lookup_at_path(ctx, at_path)
             if cached ~= nil then return cached end
             -- fall through to fresh dispatch if cached value missing
         end
-        return dispatch(ref, input, dispatch_ctx)
+        local result = dispatch(ref, input, dispatch_ctx)
+        if type(step_out_map) == "table" then
+            local out_path = step_out_map[step_id]
+            if type(out_path) == "string" and out_path ~= "" then
+                ensure_progress(ctx)
+                ctx._progress[step_id] = { status = "done", at = out_path }
+            end
+        end
+        return result
     end
 end
 
@@ -210,9 +266,11 @@ function M.make_checkpoint_plugin(state_backend, task_id, granularity)
         finalize = function(result)
             if not has_write then return end
             local final_status
+            local err_kind = result.error and result.error.kind
             if result.status == "ok" then
                 final_status = M.STATUS.COMPLETED
-            elseif result.error and result.error.kind == "safeguard_breach" then
+            elseif err_kind == "safeguard_breach"
+                   or err_kind == "escalate_required" then
                 final_status = M.STATUS.INTERRUPTED
             else
                 final_status = M.STATUS.FAILED

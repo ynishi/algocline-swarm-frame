@@ -116,6 +116,27 @@ function M.run(opts)
         return plugin_chain.run_finalize(plugins, result)
     end
 
+    -- ─── build step_id → step.out map (β land) ─────────────────────
+    --
+    -- Walk the compiled IR once to extract every (step.ref, step.out)
+    -- pair. This feeds wrap_dispatch_with_progress's POST hook so that
+    -- a successful dispatch auto-writes ctx._progress[step_id] =
+    -- {status="done", at=step.out}. Removes the need for callers to
+    -- manually wire step_done after each step; resume short-circuits
+    -- become idempotent at the runtime layer.
+    --
+    -- step_id defaults to step.ref (matches wrap_dispatch_with_progress
+    -- default). If the same ref appears multiple times in the shape, the
+    -- last occurrence wins — pipelines are expected to use unique refs.
+    local step_out_map = {}
+    flow_ir.walk(compiled, function(node)
+        if node.kind == "step"
+           and type(node.ref) == "string" and node.ref ~= ""
+           and type(node.out) == "string" and node.out ~= "" then
+            step_out_map[node.ref] = node.out
+        end
+    end)
+
     -- ─── build dispatch stack (innermost outward) ───────────────────
     --
     -- safeguarded  ← raw_dispatch with safeguard counter + observer
@@ -132,12 +153,49 @@ function M.run(opts)
         emitter({ phase = "end", ref = ref })
         return response
     end
-    local progressed  = state_mod.wrap_dispatch_with_progress(safeguarded, ctx)
+    -- Snapshot prior-run completions BEFORE entering exec. Only entries
+    -- captured here short-circuit during this run; in-run auto-writes to
+    -- ctx._progress (loop iter 2+) do NOT enter resumed_done, so loops
+    -- with repeated step.refs re-dispatch correctly.
+    local resumed_done = {}
+    if type(ctx._progress) == "table" then
+        for sid, prog in pairs(ctx._progress) do
+            if type(prog) == "table" and prog.status == "done"
+               and type(prog.at) == "string" and prog.at ~= "" then
+                resumed_done[sid] = prog.at
+            end
+        end
+    end
+
+    local progressed  = state_mod.wrap_dispatch_with_progress(
+                            safeguarded, ctx, step_out_map, resumed_done)
     local wrapped = plugin_chain.wrap_dispatch(plugins, progressed)
+
+    -- Merge built-in externs (escalate_gate signal) with caller-supplied.
+    -- __escalate__ raises a recognizable "escalate:" message — the
+    -- pcall-wrapped exec_err handler maps that to kind="escalate_required"
+    -- and state.lua finalize maps that kind to STATUS.INTERRUPTED.
+    local externs = {}
+    if type(opts.externs) == "table" then
+        for k, v in pairs(opts.externs) do externs[k] = v end
+    end
+    externs.__escalate__ = externs.__escalate__ or function(_payload)
+        error("escalate: blocked", 0)
+    end
+    -- enhance_loop fix-carry append: pure (prev_array, last) → new_array.
+    -- Returns a copy with `last` appended. Tolerates nil prev (iter 1).
+    externs.__append_carry__ = externs.__append_carry__ or function(prev, last)
+        local out = {}
+        if type(prev) == "table" then
+            for i, v in ipairs(prev) do out[i] = v end
+        end
+        out[#out + 1] = last
+        return out
+    end
 
     local exec_opts = {
         dispatch       = wrapped,
-        externs        = opts.externs,
+        externs        = externs,
         flows          = opts.flows,
         max_call_depth = opts.max_call_depth,
     }
@@ -150,6 +208,7 @@ function M.run(opts)
         local msg  = tostring(exec_err)
         local kind = "exec_fail"
         if msg:find("safeguard:") then kind = "safeguard_breach" end
+        if msg:find("escalate:") then kind = "escalate_required" end
         emitter({ phase = "error",
                   error = { kind = kind, message = msg } })
         local result = {

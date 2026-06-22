@@ -47,7 +47,7 @@ dofile("packages/swarm_host_alc/spec/dispatcher_chain_spec.lua")
 dofile("packages/swarm_host_alc/spec/dispatcher_finalize_spec.lua")
 dofile("packages/swarm_host_alc/spec/dispatcher_call_spec.lua")
 dofile("packages/swarm_host_alc/spec/dispatcher_integration_spec.lua")
-dofile("packages/swarm_demo/spec/swarm_demo_spec.lua")
+dofile("packages/verdict_swarm_pipeline/spec/verdict_swarm_pipeline_spec.lua")
 
 local r = lust.get_results()
 print()

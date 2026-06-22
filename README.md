@@ -139,8 +139,7 @@ v0.8.0 artifact store, ctx-aware gate routing, and Rich Verdict
 lifecycle hooks + `ctx.dispatch` primitive
 (`swarm_frame_algocline` v0.3.0). Swarm aggregate plugin
 (`swarm_aggregate_plugin` v0.1.0) bridging multi-agent debate (dmad /
-Du 2023) onto the dispatcher. Engine-level combinator demo
-(`combinator_demo` v0.1.0). Verdict-loop step wrapper plugin
+Du 2023) onto the dispatcher. Verdict-loop step wrapper plugin
 (`verdict_loop_plugin` v0.1.0) — gate-verdict-fix-retry on top of
 `around_step` + `ctx.dispatch`. Domain-aware state update verbs
 (`swarm_state_method` v0.1.0) composing algocline's namespace-generic
@@ -172,8 +171,8 @@ The package absorbs the bridge return-shape variance (production
 `alc.state.show` returns a JSON string, the docstring described a
 table) through an `ensure_state_table` seam that decodes via
 `alc.json_decode` when needed and accepts table-direct returns from
-test mocks. The `opts.alc` injection seam follows
-`combinator_demo/init.lua:57`.
+test mocks. The `opts.alc` injection seam follows the convention of
+picking up `_G.alc` in production while letting tests pass a mocked table.
 
 ### Step lifecycle hooks + ctx.dispatch (v0.10.0, same release)
 
@@ -206,7 +205,6 @@ New surface:
 - `swarm_frame.loop({body, until_, max, cp_key?})` — bounded iteration with predicate exit.
 - `swarm_frame.branch({cond, then_, else_?})` — single-shot dispatch on `cond(ctx)`.
 - `swarm_frame.verdict_loop({gate, fix?, parser, max_retries, cp_key?})` — retry-on-FAIL with optional fix between attempts.
-- `packages/combinator_demo` — minimal pkg demonstrating verdict_loop with `\boxed{...}` parser; `just combinator-demo` runs mock-LLM smoke, `just e2e combinator_demo` runs real-LLM e2e via agent-block.
 
 ### Artifact store (v0.8.0)
 
