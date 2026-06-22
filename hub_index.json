@@ -1,6 +1,6 @@
 {
   "schema_version": "hub_index/v0",
-  "updated_at": "2026-06-20T05:07:08Z",
+  "updated_at": "2026-06-22T02:28:37Z",
   "packages": [
     {
       "name": "combinator_demo",
@@ -63,13 +63,13 @@
       "best_card": null
     },
     {
-      "name": "swarm_state_method",
-      "version": "0.1.0",
-      "description": "Domain-aware state update verbs composing alc.state.* primitive (initial verb: update_dispatch_record).",
-      "category": "state_method",
-      "docstring": "swarm_state_method — domain-aware state update verbs.\n\nPhase C of the state primitive 2-layer split (see\n`algocline/docs/state-management.md`). Composes the namespace-generic\nAlc MCP layer (`alc.state.list / show / reset / set_dispatched /\ndelete_dispatched`) into domain verbs callable via `alc_advice`\nwithout writing Lua on the spot.\n\nInitial verb (v0.1.0): `update_dispatch_record` — shallow-merge a\npatch into an existing dispatch record's `data`. Reads the current\nrecord via `alc.state.show`, merges top-level fields from\n`opts.update` into `state.data`, and writes back via\n`alc.state.set_dispatched` (Phase B explicit-namespace set).\n\nThe `opts.alc` injection seam follows the convention established by\n`combinator_demo/init.lua:57`: production picks up `_G.alc`, tests\npass a mocked table.",
+      "name": "swarm_host_alc",
+      "version": "frame",
+      "description": "Host adapter for swarm_frame V3 runtime, scoped to algocline (state_backend / artifact_backend / state_method / prompt_builder / check_mode / dispatcher).",
+      "category": "frame",
+      "docstring": "@module 'swarm_host_alc'",
       "tags": null,
-      "type": "runnable",
+      "type": "library",
       "type_source": null,
       "source": {
         "type": "unknown"

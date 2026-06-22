@@ -1,4 +1,0 @@
-[package]
-name        = "swarm_state_method"
-version     = "0.1.0"
-description = "Domain-aware state update verbs composing alc.state.* primitive (initial verb: update_dispatch_record)."
