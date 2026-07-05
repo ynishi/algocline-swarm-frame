@@ -162,6 +162,63 @@ describe("swarm_blueprint Expr builders", function()
         expect(deep_equal(node.needle, { op = "lit", value = "x" })).to.equal(true)
         expect(deep_equal(node.haystack, { op = "path", at = "$.list" })).to.equal(true)
     end)
+
+    it("mod_() wraps lhs/rhs with literal numbers", function()
+        local node = bp.mod_(7, 3)
+        expect(deep_equal(node, { op = "mod", lhs = { op = "lit", value = 7 }, rhs = { op = "lit", value = 3 } }))
+            .to.equal(true)
+    end)
+
+    it("mod_() accepts Expr arguments", function()
+        local node = bp.mod_(bp.path("$.i"), bp.lit(2))
+        expect(deep_equal(node.lhs, { op = "path", at = "$.i" })).to.equal(true)
+        expect(deep_equal(node.rhs, { op = "lit", value = 2 })).to.equal(true)
+    end)
+
+    it("mod_() errors on missing lhs/rhs", function()
+        expect(pcall(bp.mod_, 7)).to.equal(false)
+        expect(pcall(bp.mod_)).to.equal(false)
+    end)
+
+    it("call_extern() wraps a single literal arg with the literal 'ref' key", function()
+        local node = bp.call_extern("math.sqrt", 9)
+        expect(deep_equal(node, { op = "call_extern", ["ref"] = "math.sqrt", args = { { op = "lit", value = 9 } } }))
+            .to.equal(true)
+    end)
+
+    it("call_extern() accepts a mix of Expr and raw args", function()
+        local node = bp.call_extern("f", bp.path("$.x"), 2, bp.lit("s"))
+        expect(#node.args).to.equal(3)
+        expect(deep_equal(node.args[1], { op = "path", at = "$.x" })).to.equal(true)
+        expect(deep_equal(node.args[2], { op = "lit", value = 2 })).to.equal(true)
+        expect(deep_equal(node.args[3], { op = "lit", value = "s" })).to.equal(true)
+    end)
+
+    it("call_extern() allows zero args", function()
+        local node = bp.call_extern("noop")
+        expect(node.op).to.equal("call_extern")
+        expect(deep_equal(node.args, {})).to.equal(true)
+    end)
+
+    it("call_extern() errors on missing or invalid ref", function()
+        expect(pcall(bp.call_extern, nil)).to.equal(false)
+        expect(pcall(bp.call_extern, 123)).to.equal(false)
+        expect(pcall(bp.call_extern, "")).to.equal(false)
+    end)
+
+    it("call_extern() composes correctly inside assign()", function()
+        local node = bp.assign({ at = bp.path("$.y"), value = bp.call_extern("math.sqrt", bp.path("$.x")) })
+        local expected = {
+            kind = "assign",
+            at = { op = "path", at = "$.y" },
+            value = {
+                op = "call_extern",
+                ["ref"] = "math.sqrt",
+                args = { { op = "path", at = "$.x" } },
+            },
+        }
+        expect(deep_equal(node, expected)).to.equal(true)
+    end)
 end)
 
 describe("swarm_blueprint envelope builders", function()

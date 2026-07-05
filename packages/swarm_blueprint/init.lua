@@ -100,6 +100,18 @@ M.sub = binary_expr("sub")
 M.mul = binary_expr("mul")
 M.div = binary_expr("div")
 
+--- `bp.mod_(a, b)` — numeric modulo (Lua `%` semantics). Named with a
+--- trailing underscore because `mod` collides with the `math.mod`-style
+--- convention and reads awkwardly bare; unlike the shared `binary_expr`
+--- helper above, this validates that both operands are present (the
+--- Rust-side `Mod` variant has no meaningful single-arg reading).
+function M.mod_(lhs, rhs)
+    if lhs == nil or rhs == nil then
+        error("swarm_blueprint: mod_ requires 'lhs' and 'rhs'", 2)
+    end
+    return { op = "mod", lhs = to_expr(lhs), rhs = to_expr(rhs) }
+end
+
 local function variadic_expr(op_name)
     return function(list)
         if type(list) ~= "table" then
@@ -115,6 +127,25 @@ end
 
 M.and_ = variadic_expr("and")
 M.or_ = variadic_expr("or")
+
+--- `bp.call_extern(ref, ...)` — canonical Hatch: invoke a host-registered
+--- pure extern function by opaque key, applying it to the evaluated
+--- variadic args. Raw (non-Expr) args are auto-wrapped via lit(), same as
+--- every other Expr-position argument in this module. `ref` is written
+--- under the bracket key `["ref"]` because `ref` collides with nothing in
+--- Lua but the Rust side renames the field via `#[serde(rename = "ref")]`
+--- (the struct field is `ref_`) — bracket syntax keeps the wire key exact.
+function M.call_extern(ref, ...)
+    if type(ref) ~= "string" or ref == "" then
+        error("swarm_blueprint: call_extern requires a non-empty 'ref' (string)", 2)
+    end
+    local raw_args = { ... }
+    local args = {}
+    for i = 1, select("#", ...) do
+        args[i] = to_expr(raw_args[i])
+    end
+    return { op = "call_extern", ["ref"] = ref, args = args }
+end
 
 -- ─── Node builders (tag field = "kind") ─────────────────────────────────────
 
