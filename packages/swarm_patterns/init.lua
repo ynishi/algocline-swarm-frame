@@ -15,7 +15,10 @@
 --- Design: `panel` is the first pattern (multi-perspective deliberation).
 --- `reflect` is the second pattern (self-critique refinement loop, after
 --- Madaan et al. 2023 "Self-Refine"): generator -> {critic -> reviser}* until
---- the critic signals convergence. Additional patterns (e.g. `ucb` for
+--- the critic signals convergence. `sc` is the third pattern (self-
+--- consistency voting, after Wang et al. 2022): N independent reasoning
+--- paths run in parallel via a Fanout, then a single judge agent clusters
+--- and majority-votes the answers. Additional patterns (e.g. `ucb` for
 --- bandit-style exploration) are expected to land in this same package as
 --- sibling top-level functions, each following the same "opts in, Blueprint
 --- table out" contract.
@@ -287,6 +290,157 @@ function M.reflect(opts)
         description = "Self-critique refinement loop: generate, critique, revise until "
             .. "convergence (reflect pattern)",
         tags = { "pattern:reflect" },
+    })
+end
+
+-- ─── sc ──────────────────────────────────────────────────────────────────────
+
+local SC_DEFAULT_ID = "sc-vote-v1"
+local SC_DEFAULT_N = 5
+local SC_MAX_N = 20
+
+local SC_DIVERSITY_HINTS = {
+    "Think step by step carefully.",
+    "Approach this from first principles.",
+    "Consider an alternative perspective.",
+    "Work backwards from the expected outcome.",
+    "Break this into smaller sub-problems.",
+    "Use an analogy to reason about this.",
+    "Consider edge cases and exceptions first.",
+}
+
+local SC_REASONER_SYSTEM_PROMPT_BASE = "You are a careful reasoner. Input is a JSON context: read "
+    .. "'task' as the problem. Think through the problem thoroughly. Reply with a JSON object and "
+    .. 'nothing else: {"reasoning": "<your step-by-step reasoning>", "answer": "<one-sentence final '
+    .. 'answer>"}.'
+
+local SC_JUDGE_SYSTEM_PROMPT = "You are a precise vote counter. Input is a JSON context: read 'task' "
+    .. "and 'paths' (an array of {\"reasoning\", \"answer\"} objects). Group similar answers, count "
+    .. 'votes, identify the majority. Reply with a single JSON object and nothing else: {"answer": '
+    .. '"<majority answer>", "vote_counts": {"<normalized answer>": <count>, ...}, "n_sampled": <int>, '
+    .. '"consensus": "<human-readable summary sentence>"}. Each element of paths is an object whose '
+    .. "'path' field is a {reasoning, answer} record."
+
+--- Validate the `n` option: must be a positive integer within [1, SC_MAX_N].
+local function validate_sc_n(n)
+    if type(n) ~= "number" or n ~= math.floor(n) or n < 1 then
+        error("swarm_patterns.sc: 'n' must be a positive integer", 3)
+    end
+    if n > SC_MAX_N then error("swarm_patterns.sc: 'n' must not exceed " .. SC_MAX_N, 3) end
+end
+
+--- Recursively build the Fanout body: a chain of `branch(eq($.i, k), reasoner_k,
+--- ...)` nodes that dispatches to the reasoner matching the bound loop index
+--- `$.i`. `n == 1` degenerates to a single unconditional step (no branch
+--- needed, since there is only one reasoner to dispatch to).
+local function build_sc_reasoner_chain(n)
+    if n == 1 then
+        return bp.step({ ref = "reasoner_1", in_ = bp.path("$"), out = bp.path("$.path") })
+    end
+    local function build(i)
+        local reasoner_step =
+            bp.step({ ref = "reasoner_" .. i, in_ = bp.path("$"), out = bp.path("$.path") })
+        if i == n then return reasoner_step end
+        return bp.branch({
+            cond = bp.eq(bp.path("$.i"), bp.lit(i)),
+            then_ = reasoner_step,
+            else_ = build(i + 1),
+        })
+    end
+    return build(1)
+end
+
+--- sc — self-consistency voting pattern (Wang et al. 2022).
+---
+--- Builds a Blueprint that fans out `opts.n` independent reasoning paths in
+--- parallel (each path driven by a distinct reasoner agent whose
+--- `profile.system_prompt` embeds one of 7 diversity hints, cycled by
+--- index), then hands all paths to a single `judge` agent that clusters
+--- answers, counts votes, and reports the majority-vote consensus.
+---
+--- Runtime contract (for callers driving the resulting Blueprint):
+--- `init_ctx` must provide `{task = "<problem>"}`. Each `reasoner_<i>` agent
+--- reads `task` and replies with a JSON object `{"reasoning": "<text>",
+--- "answer": "<one sentence>"}`. The `judge` agent reads `task` and `paths`
+--- (the array of per-branch contexts produced by the Fanout join, each
+--- element's `path` field holding a reasoner's `{reasoning, answer}`
+--- output) and replies with `{"answer", "vote_counts", "n_sampled",
+--- "consensus"}`. The final result lands in `$.result`. Vote aggregation is
+--- delegated entirely to the judge's LLM judgment — flow.ir has no
+--- `call_extern` primitive yet for a deterministic Lua-side count, so a
+--- switch to deterministic counting is deferred to a future revision once
+--- that primitive lands in mse.
+---
+--- @param opts table|nil {
+---   n: integer (default 5, must be a positive integer, max 20),
+---   id: string (default "sc-vote-v1"),
+---   agent_kind: string (default "agent_block"),
+---   model: string|nil (applied to every agent's profile.model when set),
+---   session_id: string|nil (origin=algo when set, else origin=inline),
+---   spec: table|nil (shared AgentDef.spec applied to every agent),
+--- }
+--- @return table Blueprint (JSON-able, built via swarm_blueprint)
+function M.sc(opts)
+    opts = opts or {}
+    local n = opts.n or SC_DEFAULT_N
+    validate_sc_n(n)
+
+    local agent_kind = opts.agent_kind or DEFAULT_AGENT_KIND
+
+    local function make_profile(system_prompt)
+        local profile = { system_prompt = system_prompt }
+        if opts.model ~= nil then profile.model = opts.model end
+        return profile
+    end
+
+    local agents = {}
+    for i = 1, n do
+        local hint = SC_DIVERSITY_HINTS[((i - 1) % #SC_DIVERSITY_HINTS) + 1]
+        agents[#agents + 1] = bp.agent({
+            name = "reasoner_" .. i,
+            kind = agent_kind,
+            profile = make_profile(SC_REASONER_SYSTEM_PROMPT_BASE .. " " .. hint),
+            spec = opts.spec,
+        })
+    end
+
+    agents[#agents + 1] = bp.agent({
+        name = "judge",
+        kind = agent_kind,
+        profile = make_profile(SC_JUDGE_SYSTEM_PROMPT),
+        spec = opts.spec,
+    })
+
+    local items = {}
+    for i = 1, n do
+        items[i] = i
+    end
+
+    local fanout_node = bp.fanout({
+        items = bp.lit(items),
+        bind = bp.path("$.i"),
+        body = build_sc_reasoner_chain(n),
+        join = "all",
+        out = bp.path("$.paths"),
+    })
+
+    local judge_step = bp.step({ ref = "judge", in_ = bp.path("$"), out = bp.path("$.result") })
+
+    local origin
+    if opts.session_id ~= nil then
+        origin = bp.origin_algo(opts.session_id)
+    else
+        origin = bp.origin_inline()
+    end
+
+    return bp.blueprint({
+        id = opts.id or SC_DEFAULT_ID,
+        flow = bp.seq({ fanout_node, judge_step }),
+        agents = agents,
+        origin = origin,
+        description = "Self-consistency: parallel independent reasoning paths aggregated by LLM judge "
+            .. "(sc pattern)",
+        tags = { "pattern:sc" },
     })
 end
 
