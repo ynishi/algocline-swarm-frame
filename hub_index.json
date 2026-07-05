@@ -1,13 +1,43 @@
 {
   "schema_version": "hub_index/v0",
-  "updated_at": "2026-06-22T06:07:56Z",
+  "updated_at": "2026-07-05T11:47:02Z",
   "packages": [
+    {
+      "name": "coding_pipeline",
+      "version": "0.1.0",
+      "description": "Reusable Coding-domain 6-step pipeline: plan → spec_qgate (enhance_loop) → write_code → compile_qgate → test_qgate → escalate_gate(HIL). Caller injects dispatch, prompts, refs, externs.",
+      "category": "swarm_pipeline",
+      "docstring": "coding_pipeline — reusable Coding-domain Swarm pipeline.\n\nA 6-step Coding-flavored verdict-driven pipeline scaffold. Built on\nthe same V3 composites as verdict_swarm_pipeline (its generic\nsibling), but the shape is Coding-shaped:\n\nS1: @plan            (linear step — design / strategy)\nS2: enhance_loop(@plan_qgate)     (= spec_check, fix_carry)\nS3: @write_code      (linear step — actual code emission)\nS4: enhance_loop(@compile_qgate)  (= compile / type-check / lint,\nfix_carry with prev compile\nerrors to address)\nS5: enhance_loop(@test_qgate)     (= test execution + review,\nfix_carry with prev test\nfailures to address)\nS6: escalate_gate(@human_review)  (= HIL halt on judgment-required\ncases; resume via ctx.human_decision)\n\nDifferences from verdict_swarm_pipeline (vsp):\n* No S3 fan-out aggregate (vsp's panel) — Coding tasks usually\ndon't benefit from N-candidate fan-out at write time (= caller\ncan always layer aggregate on top by composing shapes).\n* Two sequential enhance_loops (compile + test) instead of one,\nbecause Coding has multiple verifiable axes — letting each\nfix_carry stay scoped to its axis improves prompt focus.\n* No S7 finalize — commit handling is OUT of scope at the pipeline\nlayer (it's a side-effect on the host file system / VCS, not a\npure pipeline step). Caller handles commit after the pipeline\nreturns.\n\nSame caller-injection contract as vsp: all prompts, dispatch logic,\nper-role refs, and externs come from the caller. The pkg owns only\nthe shape factory + run wrapper + decision injection helper.\n\nStatus: v0.1.0 — first cut, Coding domain still fluid; expect\niteration on shape (= the 6 steps) and role names. composite re-use\nonly; the pkg does not introduce new IR nodes (V3 §5.8 規律).",
+      "tags": null,
+      "type": "runnable",
+      "type_source": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "swarm_blueprint",
+      "version": "0.1.0",
+      "description": "Pure Lua builder DSL that constructs mlua-swarm-engine Blueprint JSON with exact serde field names (ref/in/then/else renames, deny_unknown_fields safety).",
+      "category": "frame",
+      "docstring": "swarm_blueprint — Pure Lua builder DSL for mlua-swarm-engine Blueprint JSON.\n\nmse's Rust schema uses `#[serde(deny_unknown_fields)]` plus field renames\n(`ref` / `in` / `then` / `else`) that collide with Lua reserved words, so\nhand-written Lua tables are error-prone. This module is the single\nconstruction path: every builder returns a plain Lua table shaped exactly\nlike the wire format mse expects, with reserved-word keys written via\nbracket syntax (`[\"in\"]`, `[\"then\"]`, `[\"else\"]`).\n\nArchitecture: two builder families (Node / Expr) mirror mse's tagged-union\ntypes (`kind` tag for Node, `op` tag for Expr), plus envelope builders\n(agent / operator / origin / blueprint). Expr-position arguments accept\neither an already-built Expr table or a raw Lua value, auto-wrapping the\nlatter via `lit()`. This module never calls `alc.llm` and does not read\n`ctx` — it is a pure data-construction library, `require`d by callers\nthat assemble a Blueprint before handing it to mse.",
+      "tags": null,
+      "type": "library",
+      "type_source": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
     {
       "name": "swarm_frame",
       "version": "0.10.0",
       "description": "Thin runtime for ProgramableSwarm — state container, session-key path registry, verdict parser, linear pipeline runner, lshape 3-mode validation wrapper, and control-flow combinators (sequence / loop / branch / verdict_loop).",
       "category": "frame",
-      "docstring": "swarm_frame — Thin runtime for ProgramableSwarm.\n\nProvides the back-stage that user code never has to think about:\nstate container, session-key path registry, verdict parsing, linear\npipeline runner, and an lshape 3-mode validation wrapper. User code\nonly registers a spec (and optionally a handler) per session-key\npath; state operations, step bookkeeping, logging, and verdict\nhandling are confined to the frame.\n\nSchema-as-Data and the persistable-by-construction invariant are\ninherited from lshape. See design/design-doc.md for details.\n\nStatus: v0.10.0 (JSON provider chain reduced to 2-step injection seam:\nM.host + _G.alc.json_*; legacy dkjson / cjson / vendored pure_json\nfallback removed — algocline runtime is now a hard requirement).",
+      "docstring": "swarm_frame — Thin runtime for ProgramableSwarm.\n\nProvides the back-stage that user code never has to think about:\nstate container, session-key path registry, verdict parsing, linear\npipeline runner, and an lshape 3-mode validation wrapper. User code\nonly registers a spec (and optionally a handler) per session-key\npath; state operations, step bookkeeping, logging, and verdict\nhandling are confined to the frame.\n\nSchema-as-Data and the persistable-by-construction invariant are\ninherited from lshape. See design/design-doc.md for details.\n\nStatus: v0.10.0 (JSON provider chain reduced to 2-step injection seam:\nM.host + _G.alc.json_*; legacy dkjson / cjson / vendored pure_json\nfallback removed — algocline runtime is now a hard requirement).\n\n## Deprecated (2026-07-05)\n\nThis package is deprecated in favor of the flow.ir + mlua-swarm-engine\n(mse) stack. New pipelines should be authored as flow.ir Blueprints via\n`swarm_blueprint` (builder DSL) and, when applicable, generated by\n`swarm_patterns` (panel / reflect / sc / ucb generators); execution\nmoves to mse (Rust engine). See README §Package status for the split.\n\nNot scheduled for removal: existing consumers (notably the algocline\ncoding OrchV1 path) continue to work against this frame. No new\nfeature work is planned here; bug fixes only.",
       "tags": null,
       "type": "library",
       "type_source": null,
@@ -19,12 +49,42 @@
     },
     {
       "name": "swarm_host_alc",
-      "version": "frame",
+      "version": "0.0.1-v3-p5",
       "description": "Host adapter for swarm_frame V3 runtime, scoped to algocline (state_backend / artifact_backend / state_method / prompt_builder / check_mode / dispatcher).",
       "category": "frame",
       "docstring": "@module 'swarm_host_alc'",
       "tags": null,
       "type": "library",
+      "type_source": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "swarm_patterns",
+      "version": "0.2.0",
+      "description": "Blueprint generators that translate algocline-proven strategy patterns (panel, and future additions) into mlua-swarm-engine Blueprints, built exclusively through the swarm_blueprint builder DSL.",
+      "category": "frame",
+      "docstring": "swarm_patterns — Blueprint generators for algocline-proven strategy patterns.\n\nArchitecture: this package is a pattern generator collection, not a single\nstrategy. Each exported function (`panel`, `reflect`, and future additions\nsuch as `ucb`) takes a small options table and returns a fully built\nmlua-swarm-engine (mse) Blueprint, constructed exclusively through the\n`swarm_blueprint` builder DSL (`bp.step` / `bp.seq` / `bp.path` / `bp.agent`\n/ `bp.blueprint` / `bp.origin_*`). This module never calls `alc.llm` and\nnever reads `ctx` — it is pure data construction, mirroring\n`swarm_blueprint`'s own \"pure data\" design. Prompt assembly, previously\ndone in Lua for the algocline `panel` / `reflect` packages, is pushed down\ninto each generated agent's `profile.system_prompt`; the flow wired here is\npure data routing.\n\nDesign: `panel` is the first pattern (multi-perspective deliberation).\n`reflect` is the second pattern (self-critique refinement loop, after\nMadaan et al. 2023 \"Self-Refine\"): generator -> {critic -> reviser}* until\nthe critic signals convergence. `sc` is the third pattern (self-\nconsistency voting, after Wang et al. 2022): N independent reasoning\npaths run in parallel via a Fanout, then a single judge agent clusters\nand majority-votes the answers. `ucb` is the fourth pattern (UCB1\nbandit-style hypothesis exploration): generate, score, refine the\nhighest-potential arm each round. `moa` is the fifth pattern\n(Mixture-of-Agents, after Wang et al. 2024): L layers of n parallel\nproposers, each layer synthesized by an Aggregate-and-Synthesize\naggregator agent. Additional patterns are expected to land in this same\npackage as sibling top-level functions, each following the same \"opts\nin, Blueprint table out\" contract.",
+      "tags": null,
+      "type": "library",
+      "type_source": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "verdict_swarm_pipeline",
+      "version": "0.1.0",
+      "description": "Reusable verdict-driven 7-step Swarm pipeline: plan → QGate (enhance_loop) → aggregate → draft → QGate → escalate_gate(HIL) → finalize. Caller injects dispatch, prompts, refs, externs.",
+      "category": "swarm_pipeline",
+      "docstring": "verdict_swarm_pipeline — reusable verdict-driven Swarm pipeline.\n\nA 7-step verdict-driven pipeline scaffold suitable for \"実務型\"\n(linear + Gate + Retry + HIL/escalate) swarms. Unlike a demo, this\npkg keeps **zero domain knowledge** — prompts, role dispatch logic,\nreducer externs, and per-role agent refs are all caller-injected.\n\n## Deprecated (2026-07-05)\n\nThis pipeline is built on the deprecated swarm_frame V3 runtime and\nis deprecated by transitivity. The equivalent flow on the new stack\nis authored as a flow.ir Blueprint (via `swarm_blueprint`) and run by\nmlua-swarm-engine (mse); reducer externs move from a caller-injected\nLua table to the mse-side `TaskLaunchService::with_externs` registry,\nand the HIL step maps to mse's operator agents. For common shapes\n(multi-perspective / self-refine / self-consistency / UCB1 bandit)\nsee `swarm_patterns`. See README §Package status for the split.\n\nNot scheduled for removal: kept as long as swarm_frame is kept.\n\nPipeline shape (fixed 7 step, configurable knobs):\n\nS1: @plan                                       (linear step)\nS2: enhance_loop(@plan_qgate)                   (QGate + fix_carry)\nS3: aggregate(@panelist, items, reducer)        (fan-out + reduce)\nS4: @draft                                      (linear step)\nS5: enhance_loop(@draft_qgate)                  (QGate + fix_carry)\nS6: escalate_gate(@human_review)                (HIL halt → resume)\nS7: @finalize                                   (linear step)\n\nCaller responsibilities (inject in opts):\n\n- `dispatch` (REQUIRED): `function(ref, input) -> response`. The\ncaller routes by ref (or by reverse-mapped role) and constructs\nprompts however they like. The pkg never touches prompt strings.\n- `externs` (REQUIRED iff S3 reducer is used): table mapping\nreducer name to a pure function (e.g. {majority = fn}).\n- `refs` (optional): per-role agent ref override map. Defaults to\nDEFAULT_REFS. Lets callers A/B-test agents by string swap, version\nprompts via separate ref ids (= T2 Versioning seam), or wire the\nsame role to different host adapters.\n- `candidates` (REQUIRED iff aggregate is exercised): list of items\nwritten to ctx.candidates before run.\n- `task_id` (REQUIRED): identifies the run for state persistence\nand resume.\n- `state_backend` (optional): default = fresh in-memory backend.\nPass a persisted backend (e.g. swarm_host_alc.state_backend.file)\nto enable resume across processes.\n- `decision` (optional): when present, injected as\nctx.human_decision BEFORE the run — used on resume after an\nescalate halt to let the gate skip the escalate branch.\n- knobs (optional): `plan_max` / `draft_max` (default 3 each),\n`qgate_pass_token` (default \"pass\"),\n`escalate_blocked_token` (default \"halt\"),\n`reducer` (S3 reducer name, default \"majority\").\n\nM.build_shape(opts) returns the IR Node without invoking swarm.run —\nuseful for callers who want to compose this pipeline into a larger\nshape, or who want to attach plugins / observers / safeguard options.\n\nStatus: v0.1.0 — minimal reusable form. Domain still fluid; expect\niteration on shape / opt names. composite re-use only; the pkg does\nnot introduce new IR nodes (V3 §5.8 規律).",
+      "tags": null,
+      "type": "runnable",
       "type_source": null,
       "source": {
         "type": "unknown"

@@ -1,5 +1,104 @@
 # Changelog
 
+## v0.12.0 (2026-07-05, additive)
+
+### Added — packages/swarm_blueprint (new pkg, v0.1.0)
+
+- Pure Lua builder DSL that produces flow.ir + mlua-swarm-engine
+  (mse) Blueprint JSON with exact serde-wire field names, including
+  the reserved-word renames (`ref` / `in` / `then` / `else`) and the
+  canonical `call_extern` / `mod` op reflections that landed in
+  flow-ir-core 0.1.1 / mlua-flow-ir 0.1.1 / mlua-swarm 0.2.1
+- Node builders (`bp.step` / `bp.seq` / `bp.branch` / `bp.fanout` /
+  `bp.loop` / `bp.try_` / `bp.assign`) and 16 Expr op builders
+  (`bp.path` / `bp.lit` / comparisons / boolean / `bp.exists` /
+  arithmetic incl. `bp.mod_` / `bp.len` / `bp.in_` / `bp.call_extern`)
+  with auto-lit wrapping for raw Lua values in Expr position
+- `bp.agent{...}` / `bp.operator{...}` / origin helpers +
+  `bp.blueprint{...}` envelope; `schema_version` pinned to `0.1.0`,
+  `origin` stored under `metadata.origin`
+- Validation raises immediately on required-field omissions, enum
+  mismatches, non-`$`-prefixed paths, and Node/Expr type confusion
+
+### Added — packages/swarm_patterns (new pkg, v0.2.0)
+
+- Blueprint generators that turn algocline-proven strategy patterns
+  into ready-to-run Blueprints. Each generator returns a JSON-able
+  Lua table matching the mse Blueprint schema; execution moves to
+  the Rust engine (mse), authorship stays in Lua
+- `patterns.panel{roles?, ...}` — sequential N-role deliberation
+  with a moderator (agents = N + 1). No externs
+- `patterns.reflect{max_rounds?, ...}` — Self-Refine loop (Madaan
+  et al. 2023, arXiv:2303.17651): generator + critic + reviser with
+  a structured `{"critique", "converged"}` contract on the critic.
+  No externs
+- `patterns.sc{n?, ...}` — Self-Consistency (Wang et al. 2022,
+  arXiv:2203.11171): N parallel reasoners with cycling diversity
+  hints (Fanout join="all") aggregated by a judge (agents = N + 1).
+  No externs
+- `patterns.ucb{n?, rounds?, ...}` — UCB1 bandit hypothesis
+  exploration (Auer et al. 2002): N generators + scorer + N
+  refiners with static per-round score / argmax / refine, requires
+  three host-side externs (`ucb1` / `argmax_ucb` /
+  `finalize_ranking`) registered via
+  `mlua_swarm::TaskLaunchService::with_externs(...)`
+- `patterns.moa{n_layers?, n_proposers?, proposers?, personas?,
+  ...}` — Mixture-of-Agents (Wang et al. 2024, arXiv:2406.04692):
+  L layers × n proposers (Fanout parallel) with an aggregator per
+  layer whose system prompt transcribes Wang 2024 Table 1's
+  Aggregate-and-Synthesize instruction verbatim (agents =
+  L × (n + 1)). Wang §3 defaults (L=3, n=6) with paper-anchored
+  provenance labels; `proposers` / `personas` paths are
+  mutually-exclusive required inputs. No externs
+- spec: 53 test cases (panel 10 + reflect 9 + sc 8 + ucb 14 +
+  moa 12), and each generator's output round-trips against
+  mlua-swarm-schema 0.2.0 (deny_unknown_fields) — verified via
+  a scratchpad Rust harness
+
+### Added — docs & examples
+
+- `docs/blueprint-generators.md` — single-page reference covering
+  Common usage and all five generators (signature, source pkg,
+  flow shape, agent count, required externs, minimal snippet)
+- `examples/panel_minimal.lua` — shortest `patterns.panel` call
+  that prints the resulting Blueprint JSON, the stack's
+  Hello-world
+- `examples/moa_paper_default.lua` — Wang 2024 §3 L=3 × n=6
+  configuration citing the six paper-referenced proposer model
+  names as caller-supplied inputs
+- README §Package status added: splits the collection into
+  "Recommended for new work (flow.ir + mse stack)"
+  (`swarm_blueprint` / `swarm_patterns`) vs "Deprecated (kept for
+  existing consumers, notably algocline OrchV1)" (`swarm_frame` /
+  `swarm_host_alc` / `verdict_swarm_pipeline`) with links to the
+  guide and examples
+
+### Deprecated (kept working, no removal scheduled)
+
+- `swarm_frame` / `swarm_host_alc` / `verdict_swarm_pipeline` are
+  now marked deprecated in-tree via `## Deprecated (2026-07-05)`
+  blocks in their ldoc / module headers. The algocline OrchV1 path
+  continues to work against them. What changes for new work is:
+  authorship moves to declarative Blueprints (Lua data, no
+  execution) and runtime concerns move into the Rust engine (mse)
+
+### Docs
+
+- Retrofit the `panel` / `reflect` / `sc` / `ucb` generator
+  docstrings with Primary citation / Algorithm / Comparison /
+  Caveats / References sections transcribed verbatim from the
+  corresponding algocline packages, so every generator ships with
+  the same paper-anchor resolution `moa` already had
+
+### Bumped
+
+- Repo tag v0.11.0 → v0.12.0 (Hub collection minor bump — additive:
+  two new packages, docs, examples; existing packages unchanged
+  except for docstring / status notes)
+- `swarm_blueprint` 0.1.0 (new pkg)
+- `swarm_patterns` 0.1.0 (initial land) → 0.2.0 (moa land +
+  docstring retrofit)
+
 ## v0.11.0 (2026-06-20, breaking)
 
 ### Changed — swarm_frame (JSON provider chain reduced to 2-step injection seam)

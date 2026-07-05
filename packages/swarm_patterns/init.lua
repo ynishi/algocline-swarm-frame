@@ -31,9 +31,11 @@ local bp = require("swarm_blueprint")
 
 local M = {}
 
+M.VERSION = "0.2.0"
+
 M.meta = {
     name = "swarm_patterns",
-    version = "0.1.0",
+    version = "0.2.0",
     type = "library",
     category = "frame",
     description = "Blueprint generators that translate algocline-proven strategy patterns "
