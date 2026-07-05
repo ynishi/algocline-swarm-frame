@@ -18,10 +18,14 @@
 --- the critic signals convergence. `sc` is the third pattern (self-
 --- consistency voting, after Wang et al. 2022): N independent reasoning
 --- paths run in parallel via a Fanout, then a single judge agent clusters
---- and majority-votes the answers. Additional patterns (e.g. `ucb` for
---- bandit-style exploration) are expected to land in this same package as
---- sibling top-level functions, each following the same "opts in, Blueprint
---- table out" contract.
+--- and majority-votes the answers. `ucb` is the fourth pattern (UCB1
+--- bandit-style hypothesis exploration): generate, score, refine the
+--- highest-potential arm each round. `moa` is the fifth pattern
+--- (Mixture-of-Agents, after Wang et al. 2024): L layers of n parallel
+--- proposers, each layer synthesized by an Aggregate-and-Synthesize
+--- aggregator agent. Additional patterns are expected to land in this same
+--- package as sibling top-level functions, each following the same "opts
+--- in, Blueprint table out" contract.
 
 local bp = require("swarm_blueprint")
 
@@ -702,6 +706,299 @@ function M.ucb(opts)
         description = "UCB1 bandit-style hypothesis exploration: generate, score, refine the "
             .. "highest-potential arm each round (ucb pattern)",
         tags = { "pattern:ucb" },
+    })
+end
+
+-- ─── moa ─────────────────────────────────────────────────────────────────────
+--
+-- Primary citation: Wang, J., Wang, J., Athiwaratkun, B., Zhang, C., & Zou,
+-- J. (2024). "Mixture-of-Agents Enhances Large Language Model Capabilities".
+-- arXiv:2406.04692. https://arxiv.org/abs/2406.04692
+--
+-- Algorithm (Wang 2024 §2.2): layered aggregation. For each layer i, n
+-- proposer agents A_{i,1..n} generate responses to the current input x_i,
+-- and an aggregator synthesizes them into y_i, which becomes the next
+-- layer's input:
+--
+--   y_i     = ⊕_{j=1}^{n}[A_{i,j}(x_i)] + x_1
+--   x_{i+1} = y_i
+--
+-- Defaults (Wang 2024 §3): n_layers = 3 ("We use 3 MoA layers"), n_proposers
+-- = 6 (main experiment uses 6 open-source proposers). Both are anchored (L)
+-- to the paper's main configuration; this pkg does not hard-code proposer
+-- model identities — the caller MUST supply `proposers` or `personas`
+-- (REQUIRED extension point).
+--
+-- Proposer models (paper main experiment, reference only, NOT hard-coded):
+--   Qwen1.5-110B-Chat, Qwen1.5-72B-Chat, WizardLM-8x22B,
+--   LLaMA-3-70B-Instruct, Mixtral-8x22B-v0.1, dbrx-instruct
+--
+-- Stability tier: `n_layers`, `proposers`, `personas` are stable knobs.
+-- `personas` (single-model rotation, outside Wang §3's main config) is
+-- experimental in the sense that the paper's distinct-model diversity
+-- property is not held; it is documented as a convenience path for callers
+-- without access to 6 distinct models.
+
+local MOA_DEFAULT_ID = "moa-aggregation-v1"
+local MOA_DEFAULT_N_LAYERS = 3
+local MOA_MAX_N_LAYERS = 8
+local MOA_MAX_N_PROPOSERS = 12
+local MOA_MAX_TOTAL_ARMS = 32
+
+-- (X) Default proposer system prompt (paper does not specify one; each
+-- proposer is conceptually a distinct model with its own house style).
+local MOA_DEFAULT_PROPOSER_SYSTEM =
+    "You are a helpful, accurate assistant. Respond to the user's query thoroughly."
+
+-- Appended to every proposer's system_prompt: the JSON-context reading
+-- contract (this generator's data-routing layer, not from the paper).
+local MOA_PROPOSER_CONTRACT = "Input is a JSON context: read 'task' as the user query; at layers "
+    .. "2+ also read 'aggregated_prev' (the previous layer's aggregated output) as prior context "
+    .. "to build on. Produce your best answer as plain text only."
+
+-- (L) Aggregate-and-Synthesize prompt prefix — string literal identical to
+-- Wang 2024 Table 1's English text up to "...highest standards of accuracy
+-- and reliability." (punctuation / capitalization match exactly). The
+-- paper's trailing "\n\nResponses from models:\n%s" placeholder is replaced
+-- below with this generator's JSON-context reading contract, since the
+-- generated aggregator agent reads its input from ctx rather than a
+-- pre-formatted prompt string.
+local MOA_AS_PROMPT_PREFIX = "You have been provided with a set of responses from various "
+    .. "open-source models to the latest user query. Your task is to synthesize these responses "
+    .. "into a single, high-quality response. It is crucial to critically evaluate the information "
+    .. "provided in these responses, recognizing that some of it may be biased or incorrect. Your "
+    .. "response should not simply replicate the given answers but should offer a refined, "
+    .. "accurate, and comprehensive reply to the instruction. Ensure your response is "
+    .. "well-structured, coherent, and adheres to the highest standards of accuracy and reliability."
+
+--- Resolve the proposer list: exactly one of `opts.proposers` (multi-model
+--- PATH, Wang §3 main config) or `opts.personas` (single-model rotation
+--- PATH, outside Wang §3) is REQUIRED. Returns an array of
+--- `{model?, system?}` specs.
+local function resolve_moa_proposers(opts)
+    if opts.proposers ~= nil and opts.personas ~= nil then
+        error("swarm_patterns.moa: pass exactly one of proposers or personas, not both", 3)
+    end
+    if opts.proposers ~= nil then
+        if type(opts.proposers) ~= "table" or #opts.proposers == 0 then
+            error("swarm_patterns.moa: 'proposers' must be a non-empty array", 3)
+        end
+        return opts.proposers
+    end
+    if opts.personas ~= nil then
+        if type(opts.personas) ~= "table" or #opts.personas == 0 then
+            error("swarm_patterns.moa: 'personas' must be a non-empty array", 3)
+        end
+        local specs = {}
+        for i, persona in ipairs(opts.personas) do
+            if type(persona) ~= "string" or persona == "" then
+                error("swarm_patterns.moa: personas[" .. i .. "] must be a non-empty string", 3)
+            end
+            specs[i] = { system = persona }
+        end
+        return specs
+    end
+    error(
+        "swarm_patterns.moa: one of 'proposers' (multi-model PATH; Wang §3 main config) or "
+            .. "'personas' (single-model rotation PATH) is REQUIRED",
+        3
+    )
+end
+
+--- Validate the `n_layers` option: must be a positive integer within
+--- [1, MOA_MAX_N_LAYERS].
+local function validate_moa_n_layers(n_layers)
+    if type(n_layers) ~= "number" or n_layers ~= math.floor(n_layers) or n_layers < 1 then
+        error("swarm_patterns.moa: 'n_layers' must be a positive integer", 3)
+    end
+    if n_layers > MOA_MAX_N_LAYERS then
+        error("swarm_patterns.moa: 'n_layers' must not exceed " .. MOA_MAX_N_LAYERS, 3)
+    end
+end
+
+--- Recursively build the Fanout body for layer `layer_i`: a chain of
+--- `branch(eq($.j, k), proposer_<layer_i>_k, ...)` nodes dispatching to the
+--- proposer matching the bound loop index `$.j`. `n == 1` degenerates to a
+--- single unconditional step (mirrors `sc`'s `build_sc_reasoner_chain`).
+local function build_moa_proposer_chain(layer_i, n)
+    local function ref(k) return "proposer_" .. layer_i .. "_" .. k end
+    if n == 1 then
+        return bp.step({ ref = ref(1), in_ = bp.path("$"), out = bp.path("$.proposer_out") })
+    end
+    local function build(k)
+        local proposer_step = bp.step({ ref = ref(k), in_ = bp.path("$"), out = bp.path("$.proposer_out") })
+        if k == n then return proposer_step end
+        return bp.branch({
+            cond = bp.eq(bp.path("$.j"), bp.lit(k)),
+            then_ = proposer_step,
+            else_ = build(k + 1),
+        })
+    end
+    return build(1)
+end
+
+--- moa — Mixture-of-Agents pattern (Wang et al. 2024).
+---
+--- Builds a Blueprint with `opts.n_layers` layers; each layer fans out n
+--- proposers in parallel (a static per-layer branch chain dispatching on
+--- `$.j`), then applies a single aggregator agent whose system_prompt is
+--- Wang 2024 Table 1's Aggregate-and-Synthesize instruction. The
+--- aggregator's output feeds `$.aggregated_prev` for the next layer's
+--- proposers; the final layer's aggregated output lands in `$.answer`.
+---
+--- Runtime contract (for callers driving the resulting Blueprint):
+--- `init_ctx` must provide `{task = "<query>"}`. Each `proposer_<i>_<j>`
+--- agent reads `task` (and, from layer 2 on, `aggregated_prev`) and returns
+--- plain text. Each `aggregator_<i>` agent reads `task` and
+--- `layers.<i>.proposers_raw` (the array of per-proposer branch-local
+--- contexts produced by that layer's Fanout join; each element's
+--- `proposer_out` field holds one proposer's text) and returns a
+--- synthesized plain-text response.
+---
+--- @param opts table|nil {
+---   n_layers: integer (default 3 per Wang §3 "We use 3 MoA layers", 1..8),
+---   proposers: table[]|nil (multi-model PATH, Wang §3 main config; each
+---     entry {model?: string, system?: string}; REQUIRED unless personas is
+---     given),
+---   personas: string[]|nil (single-model rotation PATH, outside Wang §3;
+---     REQUIRED unless proposers is given),
+---   n_proposers: integer|nil (must match the resolved proposers/personas
+---     length when given; otherwise inferred from that length),
+---   id: string (default "moa-aggregation-v1"),
+---   agent_kind: string (default "agent_block"),
+---   model: string|nil (applied to every agent's profile.model when set;
+---     overridden per-proposer by proposers[j].model when present),
+---   session_id: string|nil (origin=algo when set, else origin=inline),
+---   spec: table|nil (shared AgentDef.spec applied to every agent),
+--- }
+--- @return table Blueprint (JSON-able, built via swarm_blueprint)
+function M.moa(opts)
+    opts = opts or {}
+
+    local proposer_specs = resolve_moa_proposers(opts)
+    local n = #proposer_specs
+
+    if opts.n_proposers ~= nil and opts.n_proposers ~= n then
+        error(
+            "swarm_patterns.moa: n_proposers="
+                .. tostring(opts.n_proposers)
+                .. " does not match length of proposers/personas (="
+                .. n
+                .. ")",
+            3
+        )
+    end
+    if n > MOA_MAX_N_PROPOSERS then
+        error("swarm_patterns.moa: number of proposers must not exceed " .. MOA_MAX_N_PROPOSERS, 3)
+    end
+
+    local n_layers = opts.n_layers or MOA_DEFAULT_N_LAYERS
+    validate_moa_n_layers(n_layers)
+
+    if n_layers * n > MOA_MAX_TOTAL_ARMS then
+        error(
+            "swarm_patterns.moa: L * n exceeds "
+                .. MOA_MAX_TOTAL_ARMS
+                .. " (got L="
+                .. n_layers
+                .. ", n="
+                .. n
+                .. ")",
+            3
+        )
+    end
+
+    local agent_kind = opts.agent_kind or DEFAULT_AGENT_KIND
+
+    local agents = {}
+    local flow_children = {}
+
+    flow_children[#flow_children + 1] =
+        bp.assign({ at = bp.path("$.aggregated_prev"), value = bp.lit("") })
+
+    for layer_i = 1, n_layers do
+        for j = 1, n do
+            local spec = proposer_specs[j]
+            local system_prompt = (spec.system or MOA_DEFAULT_PROPOSER_SYSTEM) .. " " .. MOA_PROPOSER_CONTRACT
+            local profile = { system_prompt = system_prompt }
+            if spec.model ~= nil then
+                profile.model = spec.model
+            elseif opts.model ~= nil then
+                profile.model = opts.model
+            end
+            agents[#agents + 1] = bp.agent({
+                name = "proposer_" .. layer_i .. "_" .. j,
+                kind = agent_kind,
+                profile = profile,
+                spec = opts.spec,
+            })
+        end
+
+        local fanout_items = {}
+        for j = 1, n do
+            fanout_items[j] = j
+        end
+        flow_children[#flow_children + 1] = bp.fanout({
+            items = bp.lit(fanout_items),
+            bind = bp.path("$.j"),
+            body = build_moa_proposer_chain(layer_i, n),
+            join = "all",
+            out = bp.path("$.layers." .. layer_i .. ".proposers_raw"),
+        })
+
+        local aggregator_profile = {
+            system_prompt = MOA_AS_PROMPT_PREFIX
+                .. "\n\nInput is a JSON context: read 'task' as the original user query, and read "
+                .. "'layers."
+                .. layer_i
+                .. ".proposers_raw' as an array of per-proposer branch-local contexts (each element "
+                .. "has a 'proposer_out' field carrying that proposer's text). Extract the "
+                .. n
+                .. " proposer outputs from the 'proposer_out' fields and synthesize them into a "
+                .. "single high-quality response following the instructions above. Reply with "
+                .. "plain text only.",
+        }
+        if opts.model ~= nil then aggregator_profile.model = opts.model end
+
+        agents[#agents + 1] = bp.agent({
+            name = "aggregator_" .. layer_i,
+            kind = agent_kind,
+            profile = aggregator_profile,
+            spec = opts.spec,
+        })
+
+        flow_children[#flow_children + 1] = bp.step({
+            ref = "aggregator_" .. layer_i,
+            in_ = bp.path("$"),
+            out = bp.path("$.layers." .. layer_i .. ".aggregated"),
+        })
+
+        flow_children[#flow_children + 1] = bp.assign({
+            at = bp.path("$.aggregated_prev"),
+            value = bp.path("$.layers." .. layer_i .. ".aggregated"),
+        })
+    end
+
+    flow_children[#flow_children + 1] = bp.assign({
+        at = bp.path("$.answer"),
+        value = bp.path("$.layers." .. n_layers .. ".aggregated"),
+    })
+
+    local origin
+    if opts.session_id ~= nil then
+        origin = bp.origin_algo(opts.session_id)
+    else
+        origin = bp.origin_inline()
+    end
+
+    return bp.blueprint({
+        id = opts.id or MOA_DEFAULT_ID,
+        flow = bp.seq(flow_children),
+        agents = agents,
+        origin = origin,
+        description = "Mixture-of-Agents (Wang 2024): L layers of n parallel proposers aggregated "
+            .. "by an Aggregate-and-Synthesize step per layer (moa pattern)",
+        tags = { "pattern:moa" },
     })
 end
 

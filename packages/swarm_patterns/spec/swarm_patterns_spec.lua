@@ -635,3 +635,206 @@ describe("swarm_patterns.ucb", function()
         expect(ok5).to.equal(false)
     end)
 end)
+
+describe("swarm_patterns.moa", function()
+    it("builds default L=3 x n=2 (personas path): 9 agents, seq shape 11 children", function()
+        local blueprint = patterns.moa({ personas = { "You are a math expert.", "You are a coder." } })
+
+        expect(#blueprint.agents).to.equal(9)
+        local names = {}
+        for _, a in ipairs(blueprint.agents) do
+            names[#names + 1] = a.name
+        end
+        expect(names[1]).to.equal("proposer_1_1")
+        expect(names[2]).to.equal("proposer_1_2")
+        expect(names[3]).to.equal("aggregator_1")
+        expect(names[4]).to.equal("proposer_2_1")
+        expect(names[5]).to.equal("proposer_2_2")
+        expect(names[6]).to.equal("aggregator_2")
+        expect(names[7]).to.equal("proposer_3_1")
+        expect(names[8]).to.equal("proposer_3_2")
+        expect(names[9]).to.equal("aggregator_3")
+
+        expect(blueprint.flow.kind).to.equal("seq")
+        expect(#blueprint.flow.children).to.equal(11)
+    end)
+
+    it("builds a well-formed envelope with default id, 'pattern:moa' tag, and Wang 2024 in description", function()
+        local blueprint = patterns.moa({ personas = { "a", "b" } })
+
+        expect(blueprint.schema_version).to.equal("0.1.0")
+        expect(blueprint.id).to.equal("moa-aggregation-v1")
+        expect(blueprint.metadata.origin.kind).to.equal("inline")
+        local has_tag = false
+        for _, t in ipairs(blueprint.metadata.tags) do
+            if t == "pattern:moa" then has_tag = true end
+        end
+        expect(has_tag).to.equal(true)
+        expect(blueprint.metadata.description:find("Wang 2024", 1, true) ~= nil).to.equal(true)
+    end)
+
+    it("wires the init assign: $.aggregated_prev = \"\" as flow.children[1]", function()
+        local blueprint = patterns.moa({ personas = { "a", "b" } })
+        local init_node = blueprint.flow.children[1]
+
+        expect(init_node.kind).to.equal("assign")
+        expect(init_node.at.at).to.equal("$.aggregated_prev")
+        expect(init_node.value.value).to.equal("")
+    end)
+
+    it("embeds persona text + the JSON-context contract into layer-1 proposer system_prompt", function()
+        local blueprint = patterns.moa({ personas = { "You are a math expert.", "You are a coder." } })
+
+        local by_name = {}
+        for _, a in ipairs(blueprint.agents) do
+            by_name[a.name] = a
+        end
+
+        local sp = by_name.proposer_1_1.profile.system_prompt
+        expect(sp:find("You are a math expert.", 1, true) ~= nil).to.equal(true)
+        expect(sp:find("Input is a JSON context", 1, true) ~= nil).to.equal(true)
+        expect(sp:find("aggregated_prev", 1, true) ~= nil).to.equal(true)
+    end)
+
+    it("resolves the proposers PATH: per-proposer model/system override, default system when omitted", function()
+        local blueprint = patterns.moa({
+            n_layers = 2,
+            proposers = { { model = "m1", system = "s1" }, { model = "m2" } },
+        })
+
+        local by_name = {}
+        for _, a in ipairs(blueprint.agents) do
+            by_name[a.name] = a
+        end
+
+        expect(by_name.proposer_1_1.profile.model).to.equal("m1")
+        expect(by_name.proposer_1_1.profile.system_prompt:find("s1", 1, true) ~= nil).to.equal(true)
+
+        expect(by_name.proposer_1_2.profile.model).to.equal("m2")
+        expect(
+            by_name.proposer_1_2.profile.system_prompt:find(
+                "You are a helpful, accurate assistant.", 1, true
+            ) ~= nil
+        ).to.equal(true)
+    end)
+
+    it("keeps the same proposer system_prompt across layers (i >= 2 reuses the same spec list)", function()
+        local blueprint = patterns.moa({ personas = { "You are a math expert.", "You are a coder." } })
+
+        local by_name = {}
+        for _, a in ipairs(blueprint.agents) do
+            by_name[a.name] = a
+        end
+
+        expect(by_name.proposer_1_1.profile.system_prompt).to.equal(by_name.proposer_2_1.profile.system_prompt)
+        expect(by_name.proposer_1_2.profile.system_prompt).to.equal(by_name.proposer_3_2.profile.system_prompt)
+    end)
+
+    it("embeds the Wang Table 1 Aggregate-and-Synthesize literal + the layer's proposers_raw path", function()
+        local blueprint = patterns.moa({ personas = { "a", "b" } })
+
+        local by_name = {}
+        for _, a in ipairs(blueprint.agents) do
+            by_name[a.name] = a
+        end
+
+        local sp = by_name.aggregator_1.profile.system_prompt
+        expect(
+            sp:find("You have been provided with a set of responses", 1, true) ~= nil
+        ).to.equal(true)
+        expect(
+            sp:find("highest standards of accuracy and reliability.", 1, true) ~= nil
+        ).to.equal(true)
+        expect(sp:find("layers.1.proposers_raw", 1, true) ~= nil).to.equal(true)
+    end)
+
+    it("wires the layer-1 fanout: lit items {1,2}, bind $.j, branch-chain body, join=all, out=layers.1.proposers_raw", function()
+        local blueprint = patterns.moa({ personas = { "a", "b" } })
+        local fanout_node = blueprint.flow.children[2]
+
+        expect(fanout_node.kind).to.equal("fanout")
+        expect(fanout_node.join).to.equal("all")
+        expect(fanout_node.items.op).to.equal("lit")
+        expect(#fanout_node.items.value).to.equal(2)
+        expect(fanout_node.bind.at).to.equal("$.j")
+        expect(fanout_node.out.at).to.equal("$.layers.1.proposers_raw")
+
+        local body = fanout_node.body
+        expect(body.kind).to.equal("branch")
+        expect(body.cond.op).to.equal("eq")
+        expect(body.cond.lhs.at).to.equal("$.j")
+        expect(body.cond.rhs.value).to.equal(1)
+        expect(body["then"].kind).to.equal("step")
+        expect(body["then"].ref).to.equal("proposer_1_1")
+        expect(body["then"].out.at).to.equal("$.proposer_out")
+        expect(body["else"].kind).to.equal("step")
+        expect(body["else"].ref).to.equal("proposer_1_2")
+    end)
+
+    it("wires the aggregator step and the aggregated_prev carry-forward assign per layer", function()
+        local blueprint = patterns.moa({ personas = { "a", "b" } })
+        local agg_step = blueprint.flow.children[3]
+        local carry_assign = blueprint.flow.children[4]
+
+        expect(agg_step.kind).to.equal("step")
+        expect(agg_step.ref).to.equal("aggregator_1")
+        expect(agg_step["in"].at).to.equal("$")
+        expect(agg_step.out.at).to.equal("$.layers.1.aggregated")
+
+        expect(carry_assign.kind).to.equal("assign")
+        expect(carry_assign.at.at).to.equal("$.aggregated_prev")
+        expect(carry_assign.value.at).to.equal("$.layers.1.aggregated")
+    end)
+
+    it("wires the final assign $.answer = $.layers.<L>.aggregated as the last flow child", function()
+        local blueprint = patterns.moa({ personas = { "a", "b" } })
+        local final_node = blueprint.flow.children[#blueprint.flow.children]
+
+        expect(final_node.kind).to.equal("assign")
+        expect(final_node.at.at).to.equal("$.answer")
+        expect(final_node.value.at).to.equal("$.layers.3.aggregated")
+    end)
+
+    it("rejects invalid proposers/personas combinations, n_layers, n_proposers, and L*n overflow", function()
+        local ok1 = pcall(patterns.moa, { proposers = { { model = "m1" } }, personas = { "a" } })
+        expect(ok1).to.equal(false)
+
+        local ok2 = pcall(patterns.moa, {})
+        expect(ok2).to.equal(false)
+
+        local ok3 = pcall(patterns.moa, { personas = {} })
+        expect(ok3).to.equal(false)
+
+        local ok4 = pcall(patterns.moa, { n_layers = 0, personas = { "a", "b" } })
+        expect(ok4).to.equal(false)
+
+        local ok5 = pcall(patterns.moa, { n_layers = 9, personas = { "a", "b" } })
+        expect(ok5).to.equal(false)
+
+        local personas13 = {}
+        for i = 1, 13 do
+            personas13[i] = "p" .. i
+        end
+        local ok6 = pcall(patterns.moa, { personas = personas13 })
+        expect(ok6).to.equal(false)
+
+        local personas11 = {}
+        for i = 1, 11 do
+            personas11[i] = "p" .. i
+        end
+        local ok7 = pcall(patterns.moa, { n_layers = 3, personas = personas11 })
+        expect(ok7).to.equal(false)
+
+        local ok8 = pcall(patterns.moa, { n_proposers = 5, personas = { "a", "b", "c" } })
+        expect(ok8).to.equal(false)
+    end)
+
+    it("applies the model opt to every agent's profile.model, including aggregators", function()
+        local blueprint = patterns.moa({ n_layers = 2, personas = { "a", "b", "c" }, model = "haiku" })
+
+        expect(#blueprint.agents).to.equal(8)
+        for _, a in ipairs(blueprint.agents) do
+            expect(a.profile.model).to.equal("haiku")
+        end
+    end)
+end)

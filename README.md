@@ -36,7 +36,7 @@ This repository ships two generations of packages side by side.
 | Package | Role |
 |---|---|
 | `swarm_blueprint` | Pure Lua builder DSL that produces flow.ir + mlua-swarm-engine Blueprints (Node / Expr / AgentDef with exact serde-wire field names, including `call_extern` and `mod`). |
-| `swarm_patterns` | Blueprint generators (`patterns.panel` / `patterns.reflect` / `patterns.sc` / `patterns.ucb`) that turn algocline-proven strategy patterns into ready-to-run Blueprints for [`mlua-swarm-engine`](https://github.com/ynishi/mlua-swarm-engine). Execution — state, parallel spawn, escalation, observers — lives in the Rust engine. |
+| `swarm_patterns` | Blueprint generators (`patterns.panel` / `patterns.reflect` / `patterns.sc` / `patterns.ucb` / `patterns.moa`) that turn algocline-proven strategy patterns into ready-to-run Blueprints for [`mlua-swarm-engine`](https://github.com/ynishi/mlua-swarm-engine). Execution — state, parallel spawn, escalation, observers — lives in the Rust engine. See [`docs/blueprint-generators.md`](docs/blueprint-generators.md) for the per-generator reference and [`examples/`](examples/) for minimal Lua snippets. |
 
 **Deprecated (kept for existing consumers, notably algocline OrchV1)**
 
