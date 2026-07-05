@@ -373,3 +373,265 @@ describe("swarm_patterns.sc", function()
         expect(ok5).to.equal(false)
     end)
 end)
+
+describe("swarm_patterns.ucb", function()
+    it("builds default n=3/rounds=2: 7 agents, seq shape (3+1+6+1+1=12 children)", function()
+        local blueprint = patterns.ucb({})
+
+        expect(#blueprint.agents).to.equal(7)
+        local names = {}
+        for _, a in ipairs(blueprint.agents) do
+            names[#names + 1] = a.name
+        end
+        expect(names[1]).to.equal("generator_1")
+        expect(names[2]).to.equal("generator_2")
+        expect(names[3]).to.equal("generator_3")
+        expect(names[4]).to.equal("scorer")
+        expect(names[5]).to.equal("refiner_1")
+        expect(names[6]).to.equal("refiner_2")
+        expect(names[7]).to.equal("refiner_3")
+
+        expect(blueprint.flow.kind).to.equal("seq")
+        -- generator(3) + pulls-init(1) + stats-init(2*3) + loop(1) + finalize(1) = 12
+        expect(#blueprint.flow.children).to.equal(12)
+    end)
+
+    it("wires the init section: pulls=0 then per-arm stats.<i>.total=0/n=0 in order", function()
+        local blueprint = patterns.ucb({})
+        local children = blueprint.flow.children
+
+        -- children[1..3] = generator steps, children[4] = pulls init
+        local pulls_init = children[4]
+        expect(pulls_init.kind).to.equal("assign")
+        expect(pulls_init.at.at).to.equal("$.pulls")
+        expect(pulls_init.value.value).to.equal(0)
+
+        local total_1, n_1 = children[5], children[6]
+        expect(total_1.at.at).to.equal("$.stats.1.total")
+        expect(total_1.value.value).to.equal(0)
+        expect(n_1.at.at).to.equal("$.stats.1.n")
+        expect(n_1.value.value).to.equal(0)
+
+        local total_2, n_2 = children[7], children[8]
+        expect(total_2.at.at).to.equal("$.stats.2.total")
+        expect(n_2.at.at).to.equal("$.stats.2.n")
+
+        local total_3, n_3 = children[9], children[10]
+        expect(total_3.at.at).to.equal("$.stats.3.total")
+        expect(n_3.at.at).to.equal("$.stats.3.n")
+    end)
+
+    it("wires the loop node shape (kind/counter/cond/max)", function()
+        local blueprint = patterns.ucb({})
+        local loop_node = blueprint.flow.children[11]
+
+        expect(loop_node.kind).to.equal("loop")
+        expect(loop_node.counter.at).to.equal("$.round")
+        expect(loop_node.cond.op).to.equal("lt")
+        expect(loop_node.cond.lhs.at).to.equal("$.round")
+        expect(loop_node.cond.rhs.value).to.equal(2)
+        expect(loop_node.max).to.equal(2)
+        expect(loop_node.body.kind).to.equal("seq")
+    end)
+
+    it("wires the loop body score section: $.i assign, scorer step, then 3 stat assigns per arm", function()
+        local blueprint = patterns.ucb({})
+        local body = blueprint.flow.children[11].body.children
+
+        -- arm 1: body[1..5]
+        expect(body[1].kind).to.equal("assign")
+        expect(body[1].at.at).to.equal("$.i")
+        expect(body[1].value.value).to.equal(1)
+
+        expect(body[2].kind).to.equal("step")
+        expect(body[2].ref).to.equal("scorer")
+        expect(body[2].out.at).to.equal("$.stats.1.last")
+
+        expect(body[3].kind).to.equal("assign")
+        expect(body[3].at.at).to.equal("$.stats.1.total")
+        expect(body[3].value.op).to.equal("add")
+        expect(body[3].value.lhs.at).to.equal("$.stats.1.total")
+        expect(body[3].value.rhs.at).to.equal("$.stats.1.last")
+
+        expect(body[4].at.at).to.equal("$.stats.1.n")
+        expect(body[4].value.op).to.equal("add")
+        expect(body[4].value.rhs.value).to.equal(1)
+
+        expect(body[5].at.at).to.equal("$.pulls")
+        expect(body[5].value.op).to.equal("add")
+
+        -- arm 2: body[6..10], arm 3: body[11..15]
+        expect(body[6].at.at).to.equal("$.i")
+        expect(body[6].value.value).to.equal(2)
+        expect(body[7].out.at).to.equal("$.stats.2.last")
+
+        expect(body[11].at.at).to.equal("$.i")
+        expect(body[11].value.value).to.equal(3)
+        expect(body[12].out.at).to.equal("$.stats.3.last")
+    end)
+
+    it("wires the loop body UCB1 assign section: call_extern('ucb1', total, n, pulls) per arm", function()
+        local blueprint = patterns.ucb({})
+        local body = blueprint.flow.children[11].body.children
+
+        -- score section occupies body[1..15] (3 arms * 5 nodes), ucb assigns follow at 16/17/18
+        local ucb_1, ucb_2, ucb_3 = body[16], body[17], body[18]
+
+        expect(ucb_1.kind).to.equal("assign")
+        expect(ucb_1.at.at).to.equal("$.stats.1.ucb")
+        expect(ucb_1.value.op).to.equal("call_extern")
+        expect(ucb_1.value["ref"]).to.equal("ucb1")
+        expect(#ucb_1.value.args).to.equal(3)
+        expect(ucb_1.value.args[1].at).to.equal("$.stats.1.total")
+        expect(ucb_1.value.args[2].at).to.equal("$.stats.1.n")
+        expect(ucb_1.value.args[3].at).to.equal("$.pulls")
+
+        expect(ucb_2.at.at).to.equal("$.stats.2.ucb")
+        expect(ucb_3.at.at).to.equal("$.stats.3.ucb")
+    end)
+
+    it("wires the argmax assign: call_extern('argmax_ucb', ucb_1, ..., ucb_N)", function()
+        local blueprint = patterns.ucb({})
+        local body = blueprint.flow.children[11].body.children
+        local argmax = body[19]
+
+        expect(argmax.kind).to.equal("assign")
+        expect(argmax.at.at).to.equal("$.best_idx")
+        expect(argmax.value.op).to.equal("call_extern")
+        expect(argmax.value["ref"]).to.equal("argmax_ucb")
+        expect(#argmax.value.args).to.equal(3)
+        expect(argmax.value.args[1].at).to.equal("$.stats.1.ucb")
+        expect(argmax.value.args[2].at).to.equal("$.stats.2.ucb")
+        expect(argmax.value.args[3].at).to.equal("$.stats.3.ucb")
+    end)
+
+    it("wires the refine branch chain by $.best_idx, leaves dispatch to refiner_<k>", function()
+        local blueprint = patterns.ucb({})
+        local body = blueprint.flow.children[11].body.children
+        local refine_chain = body[20]
+
+        expect(refine_chain.kind).to.equal("branch")
+        expect(refine_chain.cond.op).to.equal("eq")
+        expect(refine_chain.cond.lhs.at).to.equal("$.best_idx")
+        expect(refine_chain.cond.rhs.value).to.equal(1)
+        expect(refine_chain["then"].kind).to.equal("step")
+        expect(refine_chain["then"].ref).to.equal("refiner_1")
+        expect(refine_chain["then"].out.at).to.equal("$.hypotheses.1")
+
+        local inner = refine_chain["else"]
+        expect(inner.kind).to.equal("branch")
+        expect(inner.cond.rhs.value).to.equal(2)
+        expect(inner["then"].ref).to.equal("refiner_2")
+
+        expect(inner["else"].kind).to.equal("step")
+        expect(inner["else"].ref).to.equal("refiner_3")
+        expect(inner["else"].out.at).to.equal("$.hypotheses.3")
+    end)
+
+    it("degenerates the refine chain to a single unconditional step when n=1", function()
+        local blueprint = patterns.ucb({ n = 1, rounds = 1 })
+        -- flow.children layout: generator(n) + init(1+2n) + loop + finalize;
+        -- loop is the second-to-last child (finalize is last).
+        local loop_node = blueprint.flow.children[#blueprint.flow.children - 1]
+        local body = loop_node.body.children
+        local refine_node = body[#body]
+
+        expect(refine_node.kind).to.equal("step")
+        expect(refine_node.ref).to.equal("refiner_1")
+        expect(refine_node.out.at).to.equal("$.hypotheses.1")
+    end)
+
+    it("wires the finalize assign: call_extern('finalize_ranking', total/n/hyp per arm)", function()
+        local blueprint = patterns.ucb({})
+        local finalize_node = blueprint.flow.children[12]
+
+        expect(finalize_node.kind).to.equal("assign")
+        expect(finalize_node.at.at).to.equal("$.result")
+        expect(finalize_node.value.op).to.equal("call_extern")
+        expect(finalize_node.value["ref"]).to.equal("finalize_ranking")
+        expect(#finalize_node.value.args).to.equal(9)
+        expect(finalize_node.value.args[1].at).to.equal("$.stats.1.total")
+        expect(finalize_node.value.args[2].at).to.equal("$.stats.1.n")
+        expect(finalize_node.value.args[3].at).to.equal("$.hypotheses.1")
+        expect(finalize_node.value.args[7].at).to.equal("$.stats.3.total")
+        expect(finalize_node.value.args[8].at).to.equal("$.stats.3.n")
+        expect(finalize_node.value.args[9].at).to.equal("$.hypotheses.3")
+    end)
+
+    it("builds a well-formed envelope with default id and 'pattern:ucb' tag", function()
+        local blueprint = patterns.ucb({})
+
+        expect(blueprint.schema_version).to.equal("0.1.0")
+        expect(blueprint.id).to.equal("ucb-explore-v1")
+        expect(blueprint.metadata.origin.kind).to.equal("inline")
+        local has_tag = false
+        for _, t in ipairs(blueprint.metadata.tags) do
+            if t == "pattern:ucb" then has_tag = true end
+        end
+        expect(has_tag).to.equal(true)
+    end)
+
+    it("uses origin=algo with session_id when provided", function()
+        local blueprint = patterns.ucb({ session_id = "sess-1" })
+
+        expect(blueprint.metadata.origin.kind).to.equal("algo")
+        expect(blueprint.metadata.origin.session_id).to.equal("sess-1")
+    end)
+
+    it("shrinks correctly for n=2, rounds=1: 5 agents, loop.max==1", function()
+        local blueprint = patterns.ucb({ n = 2, rounds = 1 })
+
+        expect(#blueprint.agents).to.equal(5)
+        -- generator(2) + pulls-init(1) + stats-init(2*2) + loop(1) + finalize(1) = 9
+        expect(#blueprint.flow.children).to.equal(9)
+
+        local loop_node = blueprint.flow.children[8]
+        expect(loop_node.kind).to.equal("loop")
+        expect(loop_node.max).to.equal(1)
+
+        -- score section is 2 arms * 5 nodes = 10, then 2 ucb assigns, 1 argmax, 1 refine chain = 14
+        expect(#loop_node.body.children).to.equal(14)
+
+        local finalize_node = blueprint.flow.children[9]
+        expect(#finalize_node.value.args).to.equal(6)
+    end)
+
+    it("embeds cycling diversity hints into each generator's system_prompt", function()
+        local blueprint = patterns.ucb({})
+
+        local by_name = {}
+        for _, a in ipairs(blueprint.agents) do
+            by_name[a.name] = a
+        end
+
+        expect(by_name.generator_1.profile.system_prompt:find("Think step by step carefully.", 1, true) ~= nil)
+            .to.equal(true)
+
+        local blueprint8 = patterns.ucb({ n = 8, rounds = 1 })
+        local by_name8 = {}
+        for _, a in ipairs(blueprint8.agents) do
+            by_name8[a.name] = a
+        end
+        -- i=8: hints[((8-1) % 7) + 1] == hints[1] (cycles back to the first hint)
+        expect(
+            by_name8.generator_8.profile.system_prompt:find("Think step by step carefully.", 1, true) ~= nil
+        ).to.equal(true)
+    end)
+
+    it("rejects n=0, n=9, n=1.5, rounds=0, and rounds=6", function()
+        local ok1 = pcall(patterns.ucb, { n = 0 })
+        expect(ok1).to.equal(false)
+
+        local ok2 = pcall(patterns.ucb, { n = 9 })
+        expect(ok2).to.equal(false)
+
+        local ok3 = pcall(patterns.ucb, { n = 1.5 })
+        expect(ok3).to.equal(false)
+
+        local ok4 = pcall(patterns.ucb, { rounds = 0 })
+        expect(ok4).to.equal(false)
+
+        local ok5 = pcall(patterns.ucb, { rounds = 6 })
+        expect(ok5).to.equal(false)
+    end)
+end)
