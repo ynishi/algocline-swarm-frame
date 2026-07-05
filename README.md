@@ -27,6 +27,30 @@ function M.run(ctx)
 end
 ```
 
+## Package status
+
+This repository ships two generations of packages side by side.
+
+**Recommended for new work (flow.ir + mse stack)**
+
+| Package | Role |
+|---|---|
+| `swarm_blueprint` | Pure Lua builder DSL that produces flow.ir + mlua-swarm-engine Blueprints (Node / Expr / AgentDef with exact serde-wire field names, including `call_extern` and `mod`). |
+| `swarm_patterns` | Blueprint generators (`patterns.panel` / `patterns.reflect` / `patterns.sc` / `patterns.ucb`) that turn algocline-proven strategy patterns into ready-to-run Blueprints for [`mlua-swarm-engine`](https://github.com/ynishi/mlua-swarm-engine). Execution — state, parallel spawn, escalation, observers — lives in the Rust engine. |
+
+**Deprecated (kept for existing consumers, notably algocline OrchV1)**
+
+| Package | Note |
+|---|---|
+| `swarm_frame` | Lua-side thin runtime for the V3 pipeline shape. |
+| `swarm_host_alc` | Host adapter for `swarm_frame` on algocline (state / prompt / dispatcher). |
+| `verdict_swarm_pipeline` | 7-step verdict-driven pipeline built on `swarm_frame`. |
+
+The deprecated packages continue to work and are not scheduled for
+removal; the OrchV1 path stays productive on them. What changes for new
+work is: authorship moves to declarative Blueprints (Lua data, no
+execution) and runtime concerns move into the Rust engine (mse).
+
 ## Why
 
 Agent-orchestration pipelines built on algocline share a

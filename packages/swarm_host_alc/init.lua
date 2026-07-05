@@ -18,6 +18,18 @@
 -- the 6 sub-modules above. swarm_frame core stays host-neutral; this
 -- pkg is the only place that knows about algocline-specific JSON
 -- encoders, task_dir conventions, and alc.json injection seams.
+--
+-- ## Deprecated (2026-07-05)
+--
+-- Adapter for the deprecated swarm_frame V3 runtime; deprecated by
+-- transitivity. New pipelines should target the flow.ir + mse stack
+-- (swarm_blueprint / swarm_patterns), where host concerns like state
+-- persistence, dispatcher wiring, and prompt building are owned by the
+-- Rust engine (mse) instead of a Lua host adapter. See README
+-- §Package status for the split.
+--
+-- Not scheduled for removal: kept as long as swarm_frame is kept, so
+-- existing OrchV1 consumers on algocline continue to work.
 
 local M = {}
 M.VERSION = "0.0.1-v3-p5"

@@ -5,6 +5,19 @@
 --- pkg keeps **zero domain knowledge** — prompts, role dispatch logic,
 --- reducer externs, and per-role agent refs are all caller-injected.
 ---
+--- ## Deprecated (2026-07-05)
+---
+--- This pipeline is built on the deprecated swarm_frame V3 runtime and
+--- is deprecated by transitivity. The equivalent flow on the new stack
+--- is authored as a flow.ir Blueprint (via `swarm_blueprint`) and run by
+--- mlua-swarm-engine (mse); reducer externs move from a caller-injected
+--- Lua table to the mse-side `TaskLaunchService::with_externs` registry,
+--- and the HIL step maps to mse's operator agents. For common shapes
+--- (multi-perspective / self-refine / self-consistency / UCB1 bandit)
+--- see `swarm_patterns`. See README §Package status for the split.
+---
+--- Not scheduled for removal: kept as long as swarm_frame is kept.
+---
 --- Pipeline shape (fixed 7 step, configurable knobs):
 ---
 ---   S1: @plan                                       (linear step)
