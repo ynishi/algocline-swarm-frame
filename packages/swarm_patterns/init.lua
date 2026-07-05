@@ -94,6 +94,17 @@ end
 --- under `$.arguments.<role>`), followed by a moderator step that
 --- synthesizes agreements/disagreements/conclusion into `$.synthesis`.
 ---
+--- ## Algorithm
+---
+--- Multiple roles present positions, each responding to prior arguments,
+--- and a moderator synthesizes the final answer from the deliberation.
+---
+--- ## Notes
+---
+--- Based on the algocline `panel` package: "Multi-perspective deliberation
+--- with distinct roles and moderator synthesis." No paper primary; multi-
+--- perspective deliberation is a general Swarm pattern.
+---
 --- Runtime contract (for callers driving the resulting Blueprint):
 --- `init_ctx` must provide `{task = "<topic>"}`. Each panelist agent reads
 --- `task` and `arguments` (prior roles' outputs, absent for the first
@@ -202,6 +213,32 @@ end
 --- when `initial_draft` is already supplied), then repeatedly critiques and
 --- revises the draft until the critic signals convergence or `max_rounds` is
 --- reached.
+---
+--- ## Primary citation
+---
+--- Madaan, A., Tandon, N., Gupta, P., Hallinan, S., Gao, L., Wiegreffe, S.,
+--- Alon, U., Dziri, N., Prabhumoye, S., Yang, Y., Gupta, S., Majumder, B. P.,
+--- Hermann, K., Welleck, S., Yazdanbakhsh, A., Clark, P. (2023).
+--- "Self-Refine: Iterative Refinement with Self-Feedback."
+--- arXiv:2303.17651.
+---
+--- ## Algorithm
+---
+--- 1. **Generate** — produce an initial draft for the task (skipped if
+---    `initial_draft` is provided).
+--- 2. **Critique** — the LLM evaluates its own draft and emits structured
+---    feedback. Outputs `NO_MAJOR_ISSUES` / `NO_ISSUES` as a convergence
+---    signal.
+--- 3. **Revise** — the LLM rewrites the draft addressing every critique
+---    point. Steps 2–3 repeat up to `max_rounds` times or until the stop
+---    condition is met.
+---
+--- ## Theoretical foundations
+---
+--- Based on Madaan et al. (2023): an LLM can reliably critique and improve
+--- its own output without external feedback or reward models, provided the
+--- critique and revision are performed in separate inference calls so the
+--- model attends to the full prior draft without interference.
 ---
 --- Runtime contract (for callers driving the resulting Blueprint):
 --- `init_ctx` must provide `{task = "<assignment>"}`; `initial_draft =
@@ -362,6 +399,38 @@ end
 --- index), then hands all paths to a single `judge` agent that clusters
 --- answers, counts votes, and reports the majority-vote consensus.
 ---
+--- ## Algorithm
+---
+--- 1. Sample `n` independent reasoning paths for the same task (varied via
+---    a built-in diversity-hint rotation in the prompt)
+--- 2. Extract a normalized answer per path
+--- 3. Tally votes; the majority answer wins (with `consensus` LLM-synthesized
+---    summary across the winning paths)
+---
+--- ## Caveats
+---
+--- `gen_tokens` is exposed but other token budgets (extract / consensus)
+--- are intentionally NOT exposed as ctx knobs. Per-knob workflow simulation
+--- showed that no consumer workflow can tune those integers alone without
+--- ALSO changing the coupled prompt or signal path. If a future workflow
+--- truly demands tuning, design the coupled pieces together (prompt override
+--- + token budget, or structured contract + parser + budget) — do NOT simply
+--- expose the integers. See call-site comments below for the per-knob
+--- analysis.
+---
+--- ## Comparison with related packages
+---
+--- vs `panel` / `moa`: those use heterogeneous personas / models. `sc` uses
+--- a single agent with sampling-induced diversity. Cheaper but lower coverage.
+---
+--- vs `usc` (Universal Self-Consistency): `usc` lets the LLM pick the best
+--- among samples (LLM-as-judge). `sc` uses deterministic majority voting.
+---
+--- ## References
+---
+--- Wang et al. (2022). "Self-Consistency Improves Chain of Thought Reasoning
+--- in Language Models". arXiv:2203.11171.
+---
 --- Runtime contract (for callers driving the resulting Blueprint):
 --- `init_ctx` must provide `{task = "<problem>"}`. Each `reasoner_<i>` agent
 --- reads `task` and replies with a JSON object `{"reasoning": "<text>",
@@ -521,6 +590,21 @@ end
 --- argmax. The whole flow is statically unrolled at Blueprint-build time —
 --- no runtime array/map-iteration primitive is used, mirroring `sc`'s
 --- static branch-chain dispatch.
+---
+--- ## Primary citation
+---
+--- Auer, P., Cesa-Bianchi, N., & Fischer, P. (2002). "Finite-time Analysis
+--- of the Multiarmed Bandit Problem". *Machine Learning*, 47(2-3), 235-256.
+--- https://link.springer.com/article/10.1023/A:1013689704352
+---
+--- ## Algorithm
+---
+--- UCB1(i) = avg_score(i) + sqrt(2 * ln(total_pulls + 1) / n_pulls(i))
+---
+--- ## Notes
+---
+--- Adapted from the algocline `ucb` package's UCB1 implementation for
+--- hypothesis exploration.
 ---
 --- Consumer setup: this pattern relies on three host-registered pure
 --- externs, invoked via `call_extern`. The caller MUST register them on the
